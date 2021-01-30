@@ -14,9 +14,12 @@
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/write.hpp>
+#include <boost/filesystem.hpp>
 #include <functional>
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <fstream>
 
 #define WIN32_LEAN_AND_MEAN 
 #include <Windows.h>
@@ -30,69 +33,21 @@ using boost::asio::ip::tcp;
 using std::placeholders::_1;
 using std::placeholders::_2;
 
-//
-// This class manages socket timeouts by applying the concept of a deadline.
-// Some asynchronous operations are given deadlines by which they must complete.
-// Deadlines are enforced by an "actor" that persists for the lifetime of the
-// client object:
-//
-//  +----------------+
-//  |                |
-//  | check_deadline |<---+
-//  |                |    |
-//  +----------------+    | async_wait()
-//              |         |
-//              +---------+
-//
-// If the deadline actor determines that the deadline has expired, the socket
-// is closed and any outstanding operations are consequently cancelled.
-//
-// Connection establishment involves trying each endpoint in turn until a
-// connection is successful, or the available endpoints are exhausted. If the
-// deadline actor closes the socket, the connect actor is woken up and moves to
-// the next endpoint.
-//
-//  +---------------+
-//  |               |
-//  | start_connect |<---+
-//  |               |    |
-//  +---------------+    |
-//           |           |
-//  async_-  |    +----------------+
-// connect() |    |                |
-//           +--->| handle_connect |
-//                |                |
-//                +----------------+
-//                          :
-// Once a connection is     :
-// made, the connect        :
-// actor forks in two -     :
-//                          :
-// an actor for reading     :       and an actor for
-// inbound messages:        :       sending heartbeats:
-//                          :
-//  +------------+          :          +-------------+
-//  |            |<- - - - -+- - - - ->|             |
-//  | start_read |                     | start_write |<---+
-//  |            |<---+                |             |    |
-//  +------------+    |                +-------------+    | async_wait()
-//          |         |                        |          |
-//  async_- |    +-------------+       async_- |    +--------------+
-//   read_- |    |             |       write() |    |              |
-//  until() +--->| handle_read |               +--->| handle_write |
-//               |             |                    |              |
-//               +-------------+                    +--------------+
-//
-// The input actor reads messages from the socket, where messages are delimited
-// by the newline character. The deadline for a complete message is 30 seconds.
-//
-// The heartbeat actor sends a heartbeat (a message that consists of a single
-// newline character) every 10 seconds. In this example, no deadline is applied
-// to message sending.
-//
+std::string slurp(std::ifstream& in) {
+    std::ostringstream sstr;
+    sstr << in.rdbuf();
+    return sstr.str();
+}
+
+
 class client
 {
 public:
+
+    std::string serverPublicKey;
+    std::string clientPrivateKey;
+    std::string clientPublicKey;
+
     client(boost::asio::io_context& io_context)
         : socket_(io_context)
     {
@@ -174,10 +129,6 @@ private:
             // Start the input actor.
             start_read();
 
-            //std::string message = "morshu";
-
-            //writeMessage(boost::asio::const_buffer(message.c_str(), message.length()));
-
             auto keyboardInterrupt = [&]() {
                 while (true)
                 {
@@ -195,6 +146,9 @@ private:
 
             std::thread interruptThread(keyboardInterrupt);
             interruptThread.detach();
+
+
+            sendMessage("announce", clientPublicKey);
         }
     }
 
@@ -256,13 +210,22 @@ private:
             macaron::Base64::Decode(data, decodedData);
             if (type == "RSA_PUB")
             {
-                publicKey = data;
+                serverPublicKey = data;
 
-                std::cout << "[RSA_PUB]: " << std::endl << publicKey << std::endl;
+                std::cout << "[RSA_PUB]: " << std::endl << serverPublicKey << std::endl;
             }
             else if (type == "echo")
             {
                 std::cout << "[ECHO]:" << decodedData << std::endl;
+
+                if (decodedData == "blem a zoot")
+                {
+                    std::cout << serverPublicKey << std::endl;
+                }
+            }
+            else if (type == "announce")
+            {
+                std::cout << "[ANNOUNCE]:" << decodedData << std::endl;
             }
             else
             {
@@ -331,18 +294,35 @@ private:
 
     uint32_t expectedLength = 4;
     uint32_t messageCounter = 0;
-
-
-    std::string publicKey;
 };
 
 int main(int argc, char* argv[])
 {
     try
     {
+
+
         boost::asio::io_context io_context;
         tcp::resolver r(io_context);
         client c(io_context);
+
+        if (boost::filesystem::exists("keys/public-key.pem") && boost::filesystem::exists("keys/private-key.pem"))
+        {
+            std::ifstream pub("keys/public-key.pem", std::ios::in);
+            c.clientPublicKey = slurp(pub);
+            pub.close();
+
+            std::ifstream pri("keys/private-key.pem", std::ios::in);
+            c.clientPrivateKey = slurp(pri);
+            pri.close();
+
+            std::cout << "Loaded Keys" << std::endl;
+        }
+        else
+        {
+            std::cout << "No RSA key-pair Found. Shutting down.";
+            exit(EXIT_FAILURE);
+        }
 
         c.start(r.resolve("81.147.31.211", "32500"));
 
