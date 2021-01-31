@@ -7,12 +7,9 @@
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/write.hpp>
-#include <boost/filesystem.hpp>
 #include <functional>
 #include <iostream>
 #include <string>
-#include <sstream>
-#include <fstream>
 
 #define WIN32_LEAN_AND_MEAN 
 #include <Windows.h>
@@ -21,6 +18,8 @@
 
 #include "Base64.h"
 
+#include "Keyring.h"
+
 using boost::asio::steady_timer;
 using boost::asio::ip::tcp;
 using std::placeholders::_1;
@@ -28,30 +27,18 @@ using std::placeholders::_2;
 
 namespace net
 {
-	namespace
-	{
-		const std::string SCHEMA_TYPE = "type";
-		const std::string SCHEMA_DATA = "data";
-
-		const std::string SCHEMA_TYPE__RSA_PUB = "RSA_PUB";
-		const std::string SCHEMA_TYPE__ECHO = "echo";
-		const std::string SCHEMA_TYPE__ANNOUNCE = "announce";
-	}
-
-
 	class client
 	{
 	public:
 
 		std::string serverPublicKey;
-		std::string clientPrivateKey;
-		std::string clientPublicKey;
+		Keyring clientKeys;
 
 		client(boost::asio::io_context& io_context);
 
 		// Called by the user of the client class to initiate the connection process.
 		// The endpoints will have been obtained using a tcp::resolver.
-		void start(tcp::resolver::results_type endpoints);
+		bool start(tcp::resolver::results_type endpoints);
 
 		// Called by the user of the client class to initiate the connection process.
 		// The endpoints will have been obtained using a tcp::resolver.
@@ -61,6 +48,8 @@ namespace net
 		// may be called by the user of the client class, or by the class itself in
 		// response to graceful termination or an unrecoverable error.
 		void stop();
+
+		void setKeys(Keyring keys);
 
 	private:
 		void start_connect(tcp::resolver::results_type::iterator endpoint_iter);
@@ -76,7 +65,11 @@ namespace net
 
 		void readMessage(std::string messageData);
 
-		void sendMessage(std::string type, std::string message);
+		void sendAnnounce();
+
+		void sendEcho(std::string message);
+
+		void writePacket(std::string response);
 
 		void writePacket(boost::asio::const_buffer response);
 

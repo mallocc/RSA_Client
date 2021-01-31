@@ -1,5 +1,15 @@
 #include "client.h"
 
+namespace
+{
+	const std::string SCHEMA_TYPE = "type";
+	const std::string SCHEMA_DATA = "data";
+
+	const std::string SCHEMA_TYPE__RSA_PUB = "RSA_PUB";
+	const std::string SCHEMA_TYPE__ECHO = "echo";
+	const std::string SCHEMA_TYPE__ANNOUNCE = "announce";
+}
+
 net::client::client(boost::asio::io_context& io_context)
 	: socket_(io_context),
 	data_(),
@@ -10,11 +20,24 @@ net::client::client(boost::asio::io_context& io_context)
 // Called by the user of the client class to initiate the connection process.
 // The endpoints will have been obtained using a tcp::resolver.
 
-void net::client::start(tcp::resolver::results_type endpoints)
+bool net::client::start(tcp::resolver::results_type endpoints)
 {
-	// Start the connect actor.
-	endpoints_ = endpoints;
-	restart();
+	bool success = false;
+
+	if (clientKeys.valid)
+	{
+		// Start the connect actor.
+		endpoints_ = endpoints;
+		restart();
+
+		success = true;
+	}
+	else
+	{
+		std::cout << "RSA Keys not set";
+	}
+
+	return success;
 }
 
 // Called by the user of the client class to initiate the connection process.
@@ -34,6 +57,11 @@ void net::client::stop()
 	stopped_ = true;
 	boost::system::error_code ignored_error;
 	socket_.close(ignored_error);
+}
+
+void net::client::setKeys(Keyring keys)
+{
+	clientKeys = keys;
 }
 
 void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_iter)
@@ -101,7 +129,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 					std::cout << "> ";
 					std::string inString;
 					std::getline(std::cin, inString);
-					sendMessage(SCHEMA_TYPE__ECHO, inString);
+					sendEcho(inString);
 				}
 				using namespace std::chrono_literals;
 				std::this_thread::sleep_for(100ms);
@@ -111,8 +139,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 		std::thread interruptThread(keyboardInterrupt);
 		interruptThread.detach();
 
-
-		sendMessage(SCHEMA_TYPE__ANNOUNCE, clientPublicKey);
+		sendAnnounce();
 	}
 }
 
@@ -149,6 +176,7 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 
 		//stop();
 	}
+
 }
 
 void net::client::printMessage(std::string type, std::string data)
@@ -202,24 +230,44 @@ void net::client::readMessage(std::string messageData)
 	}
 }
 
-void net::client::sendMessage(std::string type, std::string message)
+void net::client::sendAnnounce()
 {
 	try
 	{
 		nlohmann::json j;
 
-		j[SCHEMA_TYPE] = type;
-		j[SCHEMA_DATA] = macaron::Base64::Encode(message);
+		j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
+		j[SCHEMA_DATA] = macaron::Base64::Encode(clientKeys.publicKey);
 		j["username"] = macaron::Base64::Encode("mallocc");
 
-		std::string jsonData = j.dump();
-		writePacket(boost::asio::const_buffer(jsonData.c_str(), jsonData.length()));
-
+		writePacket(j.dump());
 	}
 	catch (nlohmann::json::exception& e)
 	{
 		std::cout << e.what() << std::endl;
 	}
+}
+
+void net::client::sendEcho(std::string message)
+{
+	try
+	{
+		nlohmann::json j;
+
+		j[SCHEMA_TYPE] = SCHEMA_TYPE__ECHO;
+		j[SCHEMA_DATA] = macaron::Base64::Encode(message);
+
+		writePacket(j.dump());
+	}
+	catch (nlohmann::json::exception& e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+
+void net::client::writePacket(std::string response)
+{
+	writePacket(boost::asio::const_buffer(response.c_str(), response.length()));
 }
 
 void net::client::writePacket(boost::asio::const_buffer response)
@@ -235,7 +283,7 @@ void net::client::writePacket(boost::asio::const_buffer response)
 		std::bind(&client::handle_write, this, _1));
 }
 
-inline void net::client::handle_write(const boost::system::error_code& error)
+void net::client::handle_write(const boost::system::error_code& error)
 {
 	if (stopped_)
 		return;
