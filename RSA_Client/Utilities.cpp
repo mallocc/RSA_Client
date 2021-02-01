@@ -79,83 +79,70 @@ std::string util::Utilities::genIV()
     return output;
 }
 
-void util::Utilities::RSAEncrypt(CryptoPP::RSA::PublicKey publicKey, CryptoPP::byte* plaintext, size_t plaintextLength, CryptoPP::byte* cipherText)
+void util::Utilities::AESDecryptJson(std::string cipherText, nlohmann::json& j, std::vector<CryptoPP::byte> key, std::vector<CryptoPP::byte> iv)
 {
-    CryptoPP::AutoSeededRandomPool rng;
-    CryptoPP::RSAES_OAEP_SHA_Encryptor e(publicKey);
-    e.Encrypt(rng, plaintext, plaintextLength, cipherText);
+    if (key.size() < 16 || iv.size() < 16)
+    {
+        std::cout << "Error, key or IV too small" << std::endl;
+        return;
+    }
+    std::string aes_data;
+    CryptoPP::StringSource decryptor((CryptoPP::byte*) cipherText.c_str(), cipherText.size(), true,
+        new CryptoPP::Base64Decoder(
+            new CryptoPP::StringSink(aes_data)
+        ));
+    std::string decryptedText;
+    try
+    {
+        CryptoPP::CBC_Mode< CryptoPP::AES >::Decryption e;
+        e.SetKeyWithIV(key.data(), 16, iv.data());
+
+        CryptoPP::StringSource ss(aes_data, true,
+            new CryptoPP::StreamTransformationFilter(e,
+                new CryptoPP::StringSink(decryptedText)
+            ) // StreamTransformationFilter      
+        ); // StringSource
+        try
+        {
+            j = nlohmann::json::parse(decryptedText);
+        }
+        catch (nlohmann::json::exception& e)
+        {
+            std::cout << e.what() << std::endl;
+        }
+    }
+    catch (CryptoPP::Exception& ce)
+    {
+        std::cout << ce.what() << std::endl;
+    }
 }
 
-size_t util::Utilities::RSADecrypt(CryptoPP::RSA::PrivateKey privateKey, CryptoPP::byte* cipher, size_t cipherLength, CryptoPP::byte* plaintext)
+void util::Utilities::AESEcryptJson(nlohmann::json j, std::vector<CryptoPP::byte> key, std::vector<CryptoPP::byte> iv, std::string& output)
 {
-    CryptoPP::AutoSeededRandomPool rng;
-    CryptoPP::RSAES_OAEP_SHA_Decryptor d(privateKey);
-    auto res = d.Decrypt(rng, cipher, cipherLength, plaintext);
+    std::string plaintext = j.dump();
+    std::string cipherText;
 
-    if (!res.isValidCoding)
-        std::cout << "RSA Crypto Error on Decryption: Invalid Coding" << std::endl;
-
-    return res.messageLength;
-}
-
-std::string util::Utilities::AESEncryptData_B64(std::string plaintext, std::string key16, std::string iv16)
-{
-    CryptoPP::byte key[CryptoPP::AES::DEFAULT_KEYLENGTH], iv[CryptoPP::AES::BLOCKSIZE];
-
-    if (key16.size() < CryptoPP::AES::DEFAULT_KEYLENGTH)
+    if (key.size() < 16 || iv.size() < 16)
     {
-        std::cout << "Key size too small";
-        return "";
-    }
-    if (iv16.size() < CryptoPP::AES::BLOCKSIZE)
-    {
-        std::cout << "IV size too small";
-        return "";
+        std::cout << "Error, key or IV too small" << std::endl;
+        return;
     }
 
-    for (int i = 0; i < CryptoPP::AES::DEFAULT_KEYLENGTH; ++i)
-    {
-        key[i] = key16[i];
-    }
-    for (int i = 0; i < CryptoPP::AES::BLOCKSIZE; ++i)
-    {
-        iv[i] = iv16[i];
-    }
+    CryptoPP::CBC_Mode< CryptoPP::AES >::Encryption e;
+    e.SetKeyWithIV(key.data(), 16, iv.data());
 
-    std::string ciphertext;
+    CryptoPP::StringSource ss(plaintext, true,
+        new CryptoPP::StreamTransformationFilter(e,
+            new CryptoPP::StringSink(cipherText)
+        ) // StreamTransformationFilter      
+    ); // StringSource
 
-    CryptoPP::AES::Encryption aesEncryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-    CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption(aesEncryption, iv);
+    std::string b64_crypt;
 
-    CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, new CryptoPP::StringSink(ciphertext));
-    stfEncryptor.Put(reinterpret_cast<const unsigned char*>(plaintext.c_str()), plaintext.length());
-    stfEncryptor.MessageEnd();
+    CryptoPP::Base64Encoder encoder(nullptr, 0);
+    encoder.Attach(new CryptoPP::StringSink(b64_crypt));
+    encoder.Put((CryptoPP::byte*) cipherText.c_str(), cipherText.size());
+    encoder.MessageEnd();
 
-    return macaron::Base64::Encode(ciphertext);
-}
-
-std::string util::Utilities::AESDecryptData_B64(std::string ciphertextb64, std::string key16, std::string iv16)
-{
-    if (key16.size() < CryptoPP::AES::DEFAULT_KEYLENGTH)
-    {
-        std::cout << "Key size too small";
-        return "";
-    }
-    if (iv16.size() < CryptoPP::AES::BLOCKSIZE)
-    {
-        std::cout << "IV size too small";
-        return "";
-    }
-
-    std::string decryptedtext;
-    std::string ciphertext;
-
-    macaron::Base64::Decode(ciphertextb64, ciphertext);
-    CryptoPP::AES::Decryption aesDecryption((CryptoPP::byte*)key16.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH);
-    CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption(aesDecryption, (CryptoPP::byte*)iv16.c_str());
-    CryptoPP::StreamTransformationFilter stfDecryptor(cbcDecryption, new CryptoPP::StringSink(decryptedtext));
-    stfDecryptor.Put(reinterpret_cast<const unsigned char*>(ciphertext.c_str()), ciphertext.size());
-    stfDecryptor.MessageEnd();
-
-    return decryptedtext;
+    output = b64_crypt;
 }

@@ -1,6 +1,9 @@
 #include "client.h"
 
 #include <rsa.h>
+#include <aes.h>
+#include <filters.h>
+#include "modes.h"
 
 namespace
 {
@@ -13,6 +16,7 @@ namespace
 	const std::string SCHEMA_TYPE__WELCOME= "welcome";
 	const std::string SCHEMA_TYPE__ECHO = "echo";
 	const std::string SCHEMA_TYPE__ANNOUNCE = "announce";
+	const std::string SCHEMA_TYPE__CRYPT = "crypt";
 
 	const std::string ANSI_RESET = "\033[0m";
 	const std::string ANSI_RED = "\033[01;31m";
@@ -277,6 +281,14 @@ void net::client::readMessage(std::string messageData)
 				sessionIV = iv;
 				sessionKey = key;
 
+			}
+			else if (type == SCHEMA_TYPE__CRYPT)
+			{
+				printMessage(type, j.dump(2));
+				nlohmann::json crypt;
+				util::Utilities::AESDecryptJson(j["data"], crypt, sessionKey, sessionIV);
+
+				std::cout << crypt.dump(2);
 			}
 			else if (type == SCHEMA_TYPE__ECHO)
 			{

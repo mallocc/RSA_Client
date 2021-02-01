@@ -26,7 +26,7 @@ int main(int argc, char* argv[])
 		tcp::resolver r(io_context);
 		client c(io_context);
 		util::Utilities::genRSAKeyPair(2048);
-		c.setKeys(Keyring("keys/private-key.pem", "keys/public-key.pem"));
+		c.setKeys(Keyring("keys/private-key.der", "keys/public-key.der"));
 		if (c.start(r.resolve("81.147.31.211", "32500")))
 		{
 			io_context.run();
