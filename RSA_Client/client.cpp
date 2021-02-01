@@ -4,6 +4,7 @@
 #include <aes.h>
 #include <filters.h>
 #include "modes.h"
+#include <boost/filesystem.hpp>
 
 namespace
 {
@@ -84,7 +85,7 @@ void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_i
 {
 	if (endpoint_iter != endpoints_.end())
 	{
-		std::cout << ANSI_YELLOW << "Trying " << endpoint_iter->endpoint() << "...\n" << ANSI_RESET;
+		std::cout << ANSI_YELLOW << "Reestablishing connection  " << endpoint_iter->endpoint() << "...\n" << ANSI_RESET;
 
 		// Start the asynchronous connect operation.
 		socket_.async_connect(endpoint_iter->endpoint(),
@@ -198,7 +199,7 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 
 void net::client::printMessage(std::string type, std::string data)
 {
-	std::cout << "[" << ANSI_MAGENTA << type << ANSI_RESET << "]:" << data << std::endl;
+	std::cout << "[" << ANSI_MAGENTA << type << ANSI_RESET << "]: " << data << std::endl;
 }
 
 void net::client::readMessage(std::string messageData)
@@ -224,14 +225,65 @@ void net::client::readMessage(std::string messageData)
 			if (type == SCHEMA_TYPE__WELCOME)
 			{
 				serverPublicKey = data;
-				printMessage(type, data);
 
 				std::string decoded;
 				macaron::Base64::Decode(data, decoded);
 
+				serverFingerPrint = util::Utilities::sha256(decoded);
+				printMessage("Server Fingerprint", serverFingerPrint);
+
 				CryptoPP::StringSource ss((const CryptoPP::byte*) decoded.c_str(), decoded.size(), true);
 				CryptoPP::RSA::PublicKey publicKey;
 				publicKey.BERDecode(ss);
+
+				std::string filename = "keys/server/" + socket_.remote_endpoint().address().to_string() + ".der";
+
+				boost::filesystem::create_directory("keys/server/");
+				if (!boost::filesystem::exists(filename))
+				{
+					CryptoPP::FileSink pubkeysink(filename.c_str());
+					publicKey.DEREncode(pubkeysink);
+					pubkeysink.MessageEnd();
+				}
+				else
+				{
+					std::string fileb;
+					CryptoPP::FileSource b641(filename.c_str(), true,
+							new CryptoPP::StringSink(fileb)
+						);
+
+					std::string serverFingerPrintFromFile = util::Utilities::sha256(fileb);
+
+					if(serverFingerPrint == serverFingerPrintFromFile)
+					{
+						std::cout << "Server Fingerprint matches keyring" << std::endl;
+					}
+					else
+					{
+						std::cout << "[" << ANSI_RED << "Critical Crypto Error" << ANSI_RESET << "]: Server fingerprint does not match keyring!" << std::endl;
+						
+						bool proceed = false;
+						while (!proceed)
+						{
+							std::cout << ANSI_YELLOW << "Are you sure you want to connect? (y/N): " << ANSI_RESET;
+							std::string inString;
+							std::getline(std::cin, inString);
+							if (inString == "y")
+							{
+								CryptoPP::FileSink pubkeysink(filename.c_str());
+								publicKey.DEREncode(pubkeysink);
+								pubkeysink.MessageEnd();
+								std::cout << ANSI_GREEN << "Keyring updated." << ANSI_RESET << std::endl;
+								proceed = true;
+							}
+							else if (inString == "n" || inString == "N" || inString == "")
+							{
+								std::cout << ANSI_RED << "Key rejected, not updating key." << ANSI_RESET << std::endl;
+								proceed = true;
+							}
+						}
+					}
+				}
 
 				CryptoPP::AutoSeededRandomPool rng;
 				std::vector<CryptoPP::byte> iv;
@@ -263,32 +315,30 @@ void net::client::readMessage(std::string messageData)
 				encoder2.Put(key_rsa.data(), 256);
 				encoder2.MessageEnd();
 
-				try
-				{
-					nlohmann::json j;
-
-					j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
-					j["aes_key"] = key_b64;
-					j["aes_iv"] = iv_b64;
-
-					writePacket(j.dump());
-				}
-				catch (nlohmann::json::exception& e)
-				{
-					std::cout << e.what() << std::endl;
-				}
-
 				sessionIV = iv;
 				sessionKey = key;
 
+				nlohmann::json j;
+
+				j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
+				j["aes_key"] = key_b64;
+				j["aes_iv"] = iv_b64;
+
+				nlohmann::json crypt;					
+				crypt["public_key"] = macaron::Base64::Encode(clientKeys.publicKey);
+				std::string cipherText;
+				util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
+				j["crypt"] = cipherText;
+
+				writePacket(j.dump());
+
 			}
 			else if (type == SCHEMA_TYPE__CRYPT)
-			{
-				printMessage(type, j.dump(2));
+			{				
 				nlohmann::json crypt;
-				util::Utilities::AESDecryptJson(j["data"], crypt, sessionKey, sessionIV);
+				util::Utilities::AESDecryptJson(j[SCHEMA_DATA], crypt, sessionKey, sessionIV);
 
-				std::cout << crypt.dump(2);
+				printMessage(type, crypt.dump(2));
 			}
 			else if (type == SCHEMA_TYPE__ECHO)
 			{

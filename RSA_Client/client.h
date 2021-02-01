@@ -95,6 +95,8 @@ namespace net
 
 		std::vector<CryptoPP::byte> sessionIV, sessionKey;
 
+		std::string serverFingerPrint;
+
 	};
 
 }

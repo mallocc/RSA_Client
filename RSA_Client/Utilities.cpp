@@ -51,13 +51,13 @@ void util::Utilities::genRSAKeyPair(uint32_t size)
     CryptoPP::InvertibleRSAFunction privkey;
     privkey.Initialize(rng, size);
 
-    CryptoPP::Base64Encoder privkeysink(new CryptoPP::FileSink("keys/private-key.der"));
+    CryptoPP::FileSink privkeysink("keys/private-key.der");
     privkey.DEREncode(privkeysink);
     privkeysink.MessageEnd();
 
     CryptoPP::RSAFunction pubkey(privkey);
 
-    CryptoPP::Base64Encoder pubkeysink(new CryptoPP::FileSink("keys/public-key.der"));
+    CryptoPP::FileSink pubkeysink("keys/public-key.der");
     pubkey.DEREncode(pubkeysink);
     pubkeysink.MessageEnd();
 
