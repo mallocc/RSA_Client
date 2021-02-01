@@ -340,3 +340,6 @@ ASALocalRun/
 healthchecksdb
 *.pem
 *.der
+*.der
+*.der
+*.der
