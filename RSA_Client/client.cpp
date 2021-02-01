@@ -6,25 +6,32 @@
 #include "modes.h"
 #include <boost/filesystem.hpp>
 
+using util::ANSI_BLUE;
+using util::ANSI_YELLOW;
+using util::ANSI_RED;
+using util::ANSI_GREEN;
+using util::ANSI_MAGENTA;
+using util::ANSI_RESET;
+using util::ANSI_CYAN;
+using util::ANSI_CYAN_BG;
+using util::ANSI_WHITE;
+using util::ERROR_MSG;
+using util::INFO_MSG;
+
 namespace
 {
 	const std::string SCHEMA_TYPE = "type";
 	const std::string SCHEMA_DATA = "data";
 	const std::string SCHEMA_AES_KEY = "aes_key";
-	const std::string SCHEMA_IV = "iv";
+	const std::string SCHEMA_AES_IV = "aes_iv";
+	const std::string SCHEMA_CRYPT = "crypt";
+	const std::string SCHEMA_PUBLIC_KEY = "public_key";
 
 	const std::string SCHEMA_TYPE__RSA_PUB = "RSA_PUB";
 	const std::string SCHEMA_TYPE__WELCOME= "welcome";
 	const std::string SCHEMA_TYPE__ECHO = "echo";
 	const std::string SCHEMA_TYPE__ANNOUNCE = "announce";
 	const std::string SCHEMA_TYPE__CRYPT = "crypt";
-
-	const std::string ANSI_RESET = "\033[0m";
-	const std::string ANSI_RED = "\033[01;31m";
-	const std::string ANSI_GREEN = "\033[01;32m";
-	const std::string ANSI_YELLOW = "\033[01;33m";
-	const std::string ANSI_BLUE = "\033[01;34m";
-	const std::string ANSI_MAGENTA = "\033[01;35m";
 }
 
 net::client::client(boost::asio::io_context& io_context)
@@ -85,7 +92,7 @@ void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_i
 {
 	if (endpoint_iter != endpoints_.end())
 	{
-		std::cout << ANSI_YELLOW << "Reestablishing connection  " << endpoint_iter->endpoint() << "...\n" << ANSI_RESET;
+		std::cout << INFO_MSG << "Reestablishing connection on " << endpoint_iter->endpoint() << "...\n";
 
 		// Start the asynchronous connect operation.
 		socket_.async_connect(endpoint_iter->endpoint(),
@@ -101,6 +108,50 @@ void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_i
 	}
 }
 
+void net::client::handleInputCommand(std::string command)
+{
+	if (command == "ping")
+	{
+		std::stringstream ss;
+		ss << "pinging server...";
+		printClientMessage(command, ss.str());
+
+		nlohmann::json j;
+		j["type"] = "cping";
+		uint64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::system_clock::now().time_since_epoch()
+			).count();
+		j["ts"] = ms;
+
+		writePacket(j.dump());
+	}
+	else
+	{
+		sendEcho(command);
+	}
+}
+
+void net::client::startInputThread()
+{
+	auto keyboardInterrupt = [&]() {
+		while (true)
+		{
+			if (GetAsyncKeyState(VK_ESCAPE))
+			{
+				std::cout << "> ";
+				std::string inString;
+				std::getline(std::cin, inString);
+				handleInputCommand(inString);
+			}
+			using namespace std::chrono_literals;
+			std::this_thread::sleep_for(100ms);
+		}
+	};
+
+	std::thread interruptThread(keyboardInterrupt);
+	interruptThread.detach();
+}
+
 void net::client::handle_connect(const boost::system::error_code& error, tcp::resolver::results_type::iterator endpoint_iter)
 {
 	if (stopped_)
@@ -111,7 +162,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// the timeout handler must have run first.
 	if (!socket_.is_open())
 	{
-		std::cout << ANSI_RED << "Connect timed out\n" << ANSI_RESET;
+		std::cout << ERROR_MSG << "Connect timed out\n";
 
 		// Try the next available endpoint.
 		start_connect(++endpoint_iter);
@@ -120,7 +171,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// Check if the connect operation failed before the deadline expired.
 	else if (error)
 	{
-		std::cout << ANSI_RED << "Connect error: " << error.message() << "\n" << ANSI_RESET;
+		std::cout << ERROR_MSG << "Connect error: " << error.message() << "\n";
 
 		// We need to close the socket used in the previous connection attempt
 		// before starting a new one.
@@ -133,29 +184,12 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// Otherwise we have successfully established a connection.
 	else
 	{
-		std::cout << ANSI_GREEN << "Connected to " << endpoint_iter->endpoint() << "\n" << ANSI_RESET;
+		std::cout << INFO_MSG << "Connected to " << endpoint_iter->endpoint() << "\n";
 
 		// Start the input actor.
 		start_read();
 
-		auto keyboardInterrupt = [&]() {
-			while (true)
-			{
-				if (GetAsyncKeyState(VK_ESCAPE))
-				{
-					std::cout << "> ";
-					std::string inString;
-					std::getline(std::cin, inString);
-					sendEcho(inString);
-				}
-				using namespace std::chrono_literals;
-				std::this_thread::sleep_for(100ms);
-			}
-		};
-
-		std::thread interruptThread(keyboardInterrupt);
-		interruptThread.detach();
-
+		startInputThread();
 	}
 }
 
@@ -188,7 +222,7 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 	}
 	else
 	{
-		std::cout << ANSI_RED << "Error on receive: " << error.message() << "\n" << ANSI_RESET;
+		std::cout << ERROR_MSG << "Error on receive: " << error.message() << "\n";
 
 		//stop();
 
@@ -197,9 +231,129 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 
 }
 
-void net::client::printMessage(std::string type, std::string data)
+void net::client::printServerMessage(std::string type, std::string data)
 {
 	std::cout << "[" << ANSI_MAGENTA << type << ANSI_RESET << "]: " << data << std::endl;
+}
+
+void net::client::printClientMessage(std::string type, std::string data)
+{
+	std::cout << "[" << ANSI_CYAN << type << ANSI_RESET << "]: " << data << std::endl;
+}
+
+void net::client::handleWelcome(std::string data)
+{
+	serverPublicKey = data;
+
+	// decode server public key
+	std::string decoded;
+	macaron::Base64::Decode(data, decoded);
+
+	// store service finger print for checking later
+	serverFingerPrint = util::Utilities::sha256(decoded);
+	std::cout << INFO_MSG << "Server fingerprint <" << ANSI_CYAN_BG << serverFingerPrint << ANSI_RESET << ">" << std::endl;
+
+	// retrieve the public key data from the message
+	CryptoPP::StringSource ss((const CryptoPP::byte*) decoded.c_str(), decoded.size(), true);
+	CryptoPP::RSA::PublicKey publicKey;
+	publicKey.BERDecode(ss);
+
+	// get the saved server public key if it exists
+	std::string filename = "keys/server/" + socket_.remote_endpoint().address().to_string() + ".der";
+	boost::filesystem::create_directory("keys/server/");
+	if (!boost::filesystem::exists(filename))
+	{
+		// doesnt exist so store the one we got given
+		CryptoPP::FileSink pubkeysink(filename.c_str());
+		publicKey.DEREncode(pubkeysink);
+		pubkeysink.MessageEnd();
+	}
+	else
+	{
+		// we have one stored already so we need to check it is still the same
+
+		// get the stored server public key
+		std::string fileb;
+		CryptoPP::FileSource b641(filename.c_str(), true,
+			new CryptoPP::StringSink(fileb)
+		);
+		// create a finger print to compare
+		std::string serverFingerPrintFromFile = util::Utilities::sha256(fileb);
+		if (serverFingerPrint != serverFingerPrintFromFile)
+		{
+			std::cout << ERROR_MSG << "Server fingerprint does not match keyring!" << std::endl;
+
+			// let the user decide if they want to update the public key
+			if (util::Utilities::yesNo("Are you sure you want to connect?", false))
+			{
+				CryptoPP::FileSink pubkeysink(filename.c_str());
+				publicKey.DEREncode(pubkeysink);
+				pubkeysink.MessageEnd();
+				std::cout << INFO_MSG << "Keyring updated." << std::endl;
+			}
+			else
+			{
+				std::cout << ERROR_MSG << "Key rejected, not updating key." << std::endl;
+
+				stop();
+			}
+		}
+	}
+
+	// now we need to create a new aes key to crypt futher message with
+
+	// create IV and Key
+	CryptoPP::AutoSeededRandomPool rng;
+	std::vector<CryptoPP::byte> iv;
+	iv.resize(16);
+	std::vector<CryptoPP::byte> key;
+	key.resize(16);
+	rng.GenerateBlock((CryptoPP::byte*)iv.data(), 16);
+	rng.GenerateBlock((CryptoPP::byte*)key.data(), 16);
+
+	// we need RSA encrypt the IV and Key
+	std::vector<CryptoPP::byte> iv_rsa;
+	iv_rsa.resize(256);
+	std::vector<CryptoPP::byte> key_rsa;
+	key_rsa.resize(256);
+	CryptoPP::RSAES_OAEP_SHA_Encryptor e(publicKey);
+	e.Encrypt(rng, (CryptoPP::byte*)iv.data(), iv.size(), iv_rsa.data());
+	e.Encrypt(rng, (CryptoPP::byte*)key.data(), key.size(), key_rsa.data());
+
+	// lastly, base64 encode the keys so that it can be sent with alphanumeric characters
+	std::string iv_b64;
+	std::string key_b64;
+	CryptoPP::Base64Encoder encoder;
+	encoder.Attach(new CryptoPP::StringSink(iv_b64));
+	encoder.Put(iv_rsa.data(), 256);
+	encoder.MessageEnd();
+	CryptoPP::Base64Encoder encoder2;
+	encoder2.Attach(new CryptoPP::StringSink(key_b64));
+	encoder2.Put(key_rsa.data(), 256);
+	encoder2.MessageEnd();
+
+	// store for later messages
+	sessionIV = iv;
+	sessionKey = key;
+
+	// create a json message to send
+	nlohmann::json j;
+
+	// load the encrypted encoded Key and IV
+	j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
+	j[SCHEMA_AES_KEY] = key_b64;
+	j[SCHEMA_AES_IV] = iv_b64;
+
+	// encrypt the client public key for the server to use
+	nlohmann::json crypt;
+	crypt[SCHEMA_PUBLIC_KEY] = macaron::Base64::Encode(clientKeys.publicKey);
+	std::string cipherText;
+	util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
+	// load the encrypted encoded client public key
+	j[SCHEMA_CRYPT] = cipherText;
+
+	// send it
+	writePacket(j.dump());
 }
 
 void net::client::readMessage(std::string messageData)
@@ -224,172 +378,48 @@ void net::client::readMessage(std::string messageData)
 
 			if (type == SCHEMA_TYPE__WELCOME)
 			{
-				serverPublicKey = data;
-
-				std::string decoded;
-				macaron::Base64::Decode(data, decoded);
-
-				serverFingerPrint = util::Utilities::sha256(decoded);
-				printMessage("Server Fingerprint", serverFingerPrint);
-
-				CryptoPP::StringSource ss((const CryptoPP::byte*) decoded.c_str(), decoded.size(), true);
-				CryptoPP::RSA::PublicKey publicKey;
-				publicKey.BERDecode(ss);
-
-				std::string filename = "keys/server/" + socket_.remote_endpoint().address().to_string() + ".der";
-
-				boost::filesystem::create_directory("keys/server/");
-				if (!boost::filesystem::exists(filename))
-				{
-					CryptoPP::FileSink pubkeysink(filename.c_str());
-					publicKey.DEREncode(pubkeysink);
-					pubkeysink.MessageEnd();
-				}
-				else
-				{
-					std::string fileb;
-					CryptoPP::FileSource b641(filename.c_str(), true,
-							new CryptoPP::StringSink(fileb)
-						);
-
-					std::string serverFingerPrintFromFile = util::Utilities::sha256(fileb);
-
-					if(serverFingerPrint == serverFingerPrintFromFile)
-					{
-						std::cout << "Server Fingerprint matches keyring" << std::endl;
-					}
-					else
-					{
-						std::cout << "[" << ANSI_RED << "Critical Crypto Error" << ANSI_RESET << "]: Server fingerprint does not match keyring!" << std::endl;
-						
-						bool proceed = false;
-						while (!proceed)
-						{
-							std::cout << ANSI_YELLOW << "Are you sure you want to connect? (y/N): " << ANSI_RESET;
-							std::string inString;
-							std::getline(std::cin, inString);
-							if (inString == "y")
-							{
-								CryptoPP::FileSink pubkeysink(filename.c_str());
-								publicKey.DEREncode(pubkeysink);
-								pubkeysink.MessageEnd();
-								std::cout << ANSI_GREEN << "Keyring updated." << ANSI_RESET << std::endl;
-								proceed = true;
-							}
-							else if (inString == "n" || inString == "N" || inString == "")
-							{
-								std::cout << ANSI_RED << "Key rejected, not updating key." << ANSI_RESET << std::endl;
-								proceed = true;
-							}
-						}
-					}
-				}
-
-				CryptoPP::AutoSeededRandomPool rng;
-				std::vector<CryptoPP::byte> iv;
-				iv.resize(16);
-				std::vector<CryptoPP::byte> key;
-				key.resize(16);
-
-				rng.GenerateBlock((CryptoPP::byte *)iv.data(), 16);
-				rng.GenerateBlock((CryptoPP::byte *)key.data(), 16);
-
-				std::vector<CryptoPP::byte> iv_rsa;
-				iv_rsa.resize(256);
-				std::vector<CryptoPP::byte> key_rsa;
-				key_rsa.resize(256);
-
-				CryptoPP::RSAES_OAEP_SHA_Encryptor e(publicKey);
-				e.Encrypt(rng, (CryptoPP::byte *)iv.data(), iv.size(), iv_rsa.data());
-				e.Encrypt(rng, (CryptoPP::byte *)key.data(), key.size(), key_rsa.data());
-
-				std::string iv_b64;
-				std::string key_b64;
-
-				CryptoPP::Base64Encoder encoder;
-				encoder.Attach(new CryptoPP::StringSink(iv_b64));
-				encoder.Put(iv_rsa.data(), 256);
-				encoder.MessageEnd();
-				CryptoPP::Base64Encoder encoder2;
-				encoder2.Attach(new CryptoPP::StringSink(key_b64));
-				encoder2.Put(key_rsa.data(), 256);
-				encoder2.MessageEnd();
-
-				sessionIV = iv;
-				sessionKey = key;
-
-				nlohmann::json j;
-
-				j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
-				j["aes_key"] = key_b64;
-				j["aes_iv"] = iv_b64;
-
-				nlohmann::json crypt;					
-				crypt["public_key"] = macaron::Base64::Encode(clientKeys.publicKey);
-				std::string cipherText;
-				util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
-				j["crypt"] = cipherText;
-
-				writePacket(j.dump());
-
+				handleWelcome(data);
 			}
 			else if (type == SCHEMA_TYPE__CRYPT)
 			{				
 				nlohmann::json crypt;
 				util::Utilities::AESDecryptJson(j[SCHEMA_DATA], crypt, sessionKey, sessionIV);
 
-				printMessage(type, crypt.dump(2));
+				printServerMessage(type, crypt.dump(2));
 			}
 			else if (type == SCHEMA_TYPE__ECHO)
 			{
-				printMessage(type, decodedData);
+				printServerMessage(type, decodedData);
 			}
 			else if (type == SCHEMA_TYPE__ANNOUNCE)
 			{
-				printMessage(type, decodedData);
+				printServerMessage(type, decodedData);
 			}
 			else
 			{
-				printMessage(type, data);
+				printServerMessage(type, data);
 			}
 		}
 
-	}
-	catch (nlohmann::json::exception& e)
-	{
-		std::cout << e.what() << std::endl;
-	}
-}
+		if (j.contains("ts"))
+		{
+			if (type == "ping")
+			{
+				writePacket(j.dump());
+				printServerMessage(type, "ping from server");
+			}			
+			else if (type == "cping")
+			{
+				uint64_t ts_ = j["ts"];
+				uint64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch()
+					).count();
+				std::stringstream ss;
+				ss << (ms - ts_) / 2 << "ms";
+				printServerMessage(type, ss.str());
+			}
+		}
 
-void net::client::sendAnnounce()
-{
-	try
-	{
-		nlohmann::json j;
-
-		j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
-
-
-		writePacket(j.dump());
-	}
-	catch (nlohmann::json::exception& e)
-	{
-		std::cout << e.what() << std::endl;
-	}
-}
-
-void net::client::sendCreds()
-{
-	try
-	{
-		nlohmann::json j;
-
-		j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
-		j[SCHEMA_DATA] = macaron::Base64::Encode(clientKeys.publicKey);
-		j["username"] = macaron::Base64::Encode("mallocc");
-		j["password"] = util::Utilities::sha256("password");
-
-		writePacket(j.dump());
 	}
 	catch (nlohmann::json::exception& e)
 	{
@@ -401,6 +431,8 @@ void net::client::sendEcho(std::string message)
 {
 	try
 	{
+		printClientMessage("echo", message);
+
 		nlohmann::json j;
 
 		j[SCHEMA_TYPE] = SCHEMA_TYPE__ECHO;
@@ -443,7 +475,7 @@ void net::client::handle_write(const boost::system::error_code& error)
 	}
 	else
 	{
-		std::cout << ANSI_RED << "Error on writing: " << error.message() << "\n" << ANSI_RESET;
+		std::cout << ERROR_MSG << "Error on writing: " << error.message() << "\n";
 
 		//stop();
 	}

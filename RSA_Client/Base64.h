@@ -33,6 +33,8 @@ class Base64 {
  public:
 
   static std::string Encode(const std::string data) {
+      if (data.empty())
+          return "";
     static constexpr char sEncodingTable[] = {
       'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
       'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
@@ -73,6 +75,8 @@ class Base64 {
   }
 
   static std::string Decode(const std::string& input, std::string& out) {
+      if (input.empty())
+          return "";
     static constexpr unsigned char kDecodingTable[] = {
       64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
       64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,

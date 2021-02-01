@@ -14,7 +14,6 @@
 #include <sstream>
 #include <fstream>
 
-
 using net::client;
 using net::Keyring;
 

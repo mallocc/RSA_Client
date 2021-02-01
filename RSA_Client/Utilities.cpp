@@ -61,7 +61,7 @@ void util::Utilities::genRSAKeyPair(uint32_t size)
     pubkey.DEREncode(pubkeysink);
     pubkeysink.MessageEnd();
 
-    std::cout << "Generated Key Pair" << std::endl;
+    std::cout << INFO_MSG << "Generated Key Pair" << std::endl;
 }
 
 std::string util::Utilities::genIV()
@@ -83,7 +83,7 @@ void util::Utilities::AESDecryptJson(std::string cipherText, nlohmann::json& j, 
 {
     if (key.size() < 16 || iv.size() < 16)
     {
-        std::cout << "Error, key or IV too small" << std::endl;
+        std::cout << ERROR_MSG << "Error, key or IV too small" << std::endl;
         return;
     }
     std::string aes_data;
@@ -117,6 +117,36 @@ void util::Utilities::AESDecryptJson(std::string cipherText, nlohmann::json& j, 
     }
 }
 
+bool util::Utilities::yesNo(std::string question, bool defaultYes)
+{
+    bool success = false;
+
+    std::string options = defaultYes ? "(Y/n)" : "(y/N)";
+
+    bool proceed = false;
+    while (!proceed)
+    {
+        std::cout << IN_MSG << question << " " << options << ": ";
+        std::string inString;
+        std::getline(std::cin, inString);
+        if (inString == "y" || inString == "Y" || (defaultYes && (inString.empty())))
+        {
+            proceed = true;
+            success = true;
+        }
+        else if (inString == "n" || inString == "N" || (!defaultYes && (inString.empty())))
+        {
+            proceed = true;
+        }
+        else
+        {
+            std::cout << ERROR_MSG << "'" << inString << "' is not an option of " << options << std::endl;
+        }
+    }
+
+    return success;
+}
+
 void util::Utilities::AESEcryptJson(nlohmann::json j, std::vector<CryptoPP::byte> key, std::vector<CryptoPP::byte> iv, std::string& output)
 {
     std::string plaintext = j.dump();
@@ -124,7 +154,7 @@ void util::Utilities::AESEcryptJson(nlohmann::json j, std::vector<CryptoPP::byte
 
     if (key.size() < 16 || iv.size() < 16)
     {
-        std::cout << "Error, key or IV too small" << std::endl;
+        std::cout << ERROR_MSG << "Error, key or IV too small" << std::endl;
         return;
     }
 

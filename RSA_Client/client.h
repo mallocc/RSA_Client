@@ -57,6 +57,10 @@ namespace net
 	private:
 		void start_connect(tcp::resolver::results_type::iterator endpoint_iter);
 
+		void handleInputCommand(std::string command);
+
+		void startInputThread();
+
 		void handle_connect(const boost::system::error_code& error,
 			tcp::resolver::results_type::iterator endpoint_iter);
 
@@ -64,13 +68,12 @@ namespace net
 
 		void handle_read(const boost::system::error_code& error, std::size_t n);
 
-		void printMessage(std::string type, std::string data);
+		void printServerMessage(std::string type, std::string data);
+		void printClientMessage(std::string type, std::string data);
+
+		void handleWelcome(std::string data);
 
 		void readMessage(std::string messageData);
-
-		void sendAnnounce();
-
-		void sendCreds();
 
 		void sendEcho(std::string message);
 
