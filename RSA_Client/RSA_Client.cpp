@@ -14,6 +14,7 @@
 #include <sstream>
 #include <fstream>
 
+
 using net::client;
 using net::Keyring;
 
@@ -24,12 +25,12 @@ int main(int argc, char* argv[])
 		boost::asio::io_context io_context;
 		tcp::resolver r(io_context);
 		client c(io_context);
+		util::Utilities::genRSAKeyPair(2048);
 		c.setKeys(Keyring("keys/private-key.pem", "keys/public-key.pem"));
 		if (c.start(r.resolve("81.147.31.211", "32500")))
 		{
 			io_context.run();
 		}
-
 	}
 	catch (std::exception& e)
 	{

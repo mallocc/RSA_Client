@@ -13,12 +13,15 @@
 
 #define WIN32_LEAN_AND_MEAN 
 #include <Windows.h>
+#pragma comment(lib, "User32.lib")
 
 #include "json.hpp"
 
 #include "Base64.h"
 
 #include "Keyring.h"
+
+#include "Utilities.h"
 
 using boost::asio::steady_timer;
 using boost::asio::ip::tcp;
@@ -67,6 +70,8 @@ namespace net
 
 		void sendAnnounce();
 
+		void sendCreds();
+
 		void sendEcho(std::string message);
 
 		void writePacket(std::string response);
@@ -74,7 +79,6 @@ namespace net
 		void writePacket(boost::asio::const_buffer response);
 
 		void handle_write(const boost::system::error_code& error);
-
 	private:
 		bool stopped_ = false;
 		tcp::resolver::results_type endpoints_;
@@ -88,6 +92,8 @@ namespace net
 
 		uint32_t expectedLength = 4;
 		uint32_t messageCounter = 0;
+
+		std::vector<CryptoPP::byte> sessionIV, sessionKey;
 
 	};
 

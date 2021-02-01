@@ -4,6 +4,7 @@
 #include <fstream>
 #include <boost/filesystem.hpp>
 #include <iostream>
+#include "Utilities.h"
 
 namespace net
 {
@@ -22,11 +23,11 @@ namespace net
 			if (boost::filesystem::exists(privateKeyFile) && boost::filesystem::exists(publicKeyFile))
 			{
 				std::ifstream pub(publicKeyFile, std::ios::in);
-				publicKey = slurp(pub);
+				publicKey = util::Utilities::slurp(pub);
 				pub.close();
 
 				std::ifstream pri(privateKeyFile, std::ios::in);
-				privateKey = slurp(pri);
+				privateKey = util::Utilities::slurp(pri);
 				pri.close();
 
 				std::cout << "Loaded Keys" << std::endl;
@@ -40,11 +41,5 @@ namespace net
 		}
 
 	private:
-		std::string slurp(std::ifstream& in)
-		{
-			std::ostringstream sstr;
-			sstr << in.rdbuf();
-			return sstr.str();
-		}
 	};
 }

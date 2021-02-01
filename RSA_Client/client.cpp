@@ -1,13 +1,25 @@
 #include "client.h"
 
+#include <rsa.h>
+
 namespace
 {
 	const std::string SCHEMA_TYPE = "type";
 	const std::string SCHEMA_DATA = "data";
+	const std::string SCHEMA_AES_KEY = "aes_key";
+	const std::string SCHEMA_IV = "iv";
 
 	const std::string SCHEMA_TYPE__RSA_PUB = "RSA_PUB";
+	const std::string SCHEMA_TYPE__WELCOME= "welcome";
 	const std::string SCHEMA_TYPE__ECHO = "echo";
 	const std::string SCHEMA_TYPE__ANNOUNCE = "announce";
+
+	const std::string ANSI_RESET = "\033[0m";
+	const std::string ANSI_RED = "\033[01;31m";
+	const std::string ANSI_GREEN = "\033[01;32m";
+	const std::string ANSI_YELLOW = "\033[01;33m";
+	const std::string ANSI_BLUE = "\033[01;34m";
+	const std::string ANSI_MAGENTA = "\033[01;35m";
 }
 
 net::client::client(boost::asio::io_context& io_context)
@@ -34,7 +46,7 @@ bool net::client::start(tcp::resolver::results_type endpoints)
 	}
 	else
 	{
-		std::cout << "RSA Keys not set";
+		std::cout << ANSI_RED << "RSA Keys not set\n" << ANSI_RESET;
 	}
 
 	return success;
@@ -68,7 +80,7 @@ void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_i
 {
 	if (endpoint_iter != endpoints_.end())
 	{
-		std::cout << "Trying " << endpoint_iter->endpoint() << "...\n";
+		std::cout << ANSI_YELLOW << "Trying " << endpoint_iter->endpoint() << "...\n" << ANSI_RESET;
 
 		// Start the asynchronous connect operation.
 		socket_.async_connect(endpoint_iter->endpoint(),
@@ -94,7 +106,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// the timeout handler must have run first.
 	if (!socket_.is_open())
 	{
-		std::cout << "Connect timed out\n";
+		std::cout << ANSI_RED << "Connect timed out\n" << ANSI_RESET;
 
 		// Try the next available endpoint.
 		start_connect(++endpoint_iter);
@@ -103,7 +115,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// Check if the connect operation failed before the deadline expired.
 	else if (error)
 	{
-		std::cout << "Connect error: " << error.message() << "\n";
+		std::cout << ANSI_RED << "Connect error: " << error.message() << "\n" << ANSI_RESET;
 
 		// We need to close the socket used in the previous connection attempt
 		// before starting a new one.
@@ -116,7 +128,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// Otherwise we have successfully established a connection.
 	else
 	{
-		std::cout << "Connected to " << endpoint_iter->endpoint() << "\n";
+		std::cout << ANSI_GREEN << "Connected to " << endpoint_iter->endpoint() << "\n" << ANSI_RESET;
 
 		// Start the input actor.
 		start_read();
@@ -139,7 +151,6 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 		std::thread interruptThread(keyboardInterrupt);
 		interruptThread.detach();
 
-		sendAnnounce();
 	}
 }
 
@@ -172,16 +183,18 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 	}
 	else
 	{
-		std::cout << "Error on receive: " << error.message() << "\n";
+		std::cout << ANSI_RED << "Error on receive: " << error.message() << "\n" << ANSI_RESET;
 
 		//stop();
+
+		restart();
 	}
 
 }
 
 void net::client::printMessage(std::string type, std::string data)
 {
-	std::cout << "[" << type << "]:" << data << std::endl;
+	std::cout << "[" << ANSI_MAGENTA << type << ANSI_RESET << "]:" << data << std::endl;
 }
 
 void net::client::readMessage(std::string messageData)
@@ -204,10 +217,66 @@ void net::client::readMessage(std::string messageData)
 			data = j[SCHEMA_DATA];
 			macaron::Base64::Decode(data, decodedData);
 
-			if (type == SCHEMA_TYPE__RSA_PUB)
+			if (type == SCHEMA_TYPE__WELCOME)
 			{
 				serverPublicKey = data;
 				printMessage(type, data);
+
+				std::string decoded;
+				macaron::Base64::Decode(data, decoded);
+
+				CryptoPP::StringSource ss((const CryptoPP::byte*) decoded.c_str(), decoded.size(), true);
+				CryptoPP::RSA::PublicKey publicKey;
+				publicKey.BERDecode(ss);
+
+				CryptoPP::AutoSeededRandomPool rng;
+				std::vector<CryptoPP::byte> iv;
+				iv.resize(16);
+				std::vector<CryptoPP::byte> key;
+				key.resize(16);
+
+				rng.GenerateBlock((CryptoPP::byte *)iv.data(), 16);
+				rng.GenerateBlock((CryptoPP::byte *)key.data(), 16);
+
+				std::vector<CryptoPP::byte> iv_rsa;
+				iv_rsa.resize(256);
+				std::vector<CryptoPP::byte> key_rsa;
+				key_rsa.resize(256);
+
+				CryptoPP::RSAES_OAEP_SHA_Encryptor e(publicKey);
+				e.Encrypt(rng, (CryptoPP::byte *)iv.data(), iv.size(), iv_rsa.data());
+				e.Encrypt(rng, (CryptoPP::byte *)key.data(), key.size(), key_rsa.data());
+
+				std::string iv_b64;
+				std::string key_b64;
+
+				CryptoPP::Base64Encoder encoder;
+				encoder.Attach(new CryptoPP::StringSink(iv_b64));
+				encoder.Put(iv_rsa.data(), 256);
+				encoder.MessageEnd();
+				CryptoPP::Base64Encoder encoder2;
+				encoder2.Attach(new CryptoPP::StringSink(key_b64));
+				encoder2.Put(key_rsa.data(), 256);
+				encoder2.MessageEnd();
+
+				try
+				{
+					nlohmann::json j;
+
+					j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
+					j["aes_key"] = key_b64;
+					j["aes_iv"] = iv_b64;
+
+					writePacket(j.dump());
+				}
+				catch (nlohmann::json::exception& e)
+				{
+					std::cout << e.what() << std::endl;
+				}
+
+				sessionIV = iv;
+				sessionKey = key;
+
 			}
 			else if (type == SCHEMA_TYPE__ECHO)
 			{
@@ -237,8 +306,26 @@ void net::client::sendAnnounce()
 		nlohmann::json j;
 
 		j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
+
+
+		writePacket(j.dump());
+	}
+	catch (nlohmann::json::exception& e)
+	{
+		std::cout << e.what() << std::endl;
+	}
+}
+
+void net::client::sendCreds()
+{
+	try
+	{
+		nlohmann::json j;
+
+		j[SCHEMA_TYPE] = SCHEMA_TYPE__ANNOUNCE;
 		j[SCHEMA_DATA] = macaron::Base64::Encode(clientKeys.publicKey);
 		j["username"] = macaron::Base64::Encode("mallocc");
+		j["password"] = util::Utilities::sha256("password");
 
 		writePacket(j.dump());
 	}
@@ -294,7 +381,7 @@ void net::client::handle_write(const boost::system::error_code& error)
 	}
 	else
 	{
-		std::cout << "Error on writing: " << error.message() << "\n";
+		std::cout << ANSI_RED << "Error on writing: " << error.message() << "\n" << ANSI_RESET;
 
 		//stop();
 	}
