@@ -38,5 +38,49 @@ namespace util
         static void AESDecryptJson(std::string cipherText, nlohmann::json &j, std::vector<CryptoPP::byte> key, std::vector<CryptoPP::byte> iv);
 
         static bool yesNo(std::string question, bool defaultYes = true);
+        static std::string getInput(std::string question, std::string defaultString = "", bool noDefault = false);
     };
+
+
+    class Console
+    {
+    public:
+
+
+        std::ostream& info();
+
+        std::ostream& error();
+
+        std::ostream& out();
+
+        std::string note();
+
+        std::string end();
+        
+
+        static Console& getInstance()
+        {
+            static Console instance; // Guaranteed to be destroyed.
+                                  // Instantiated on first use.
+            return instance;
+        }
+
+        std::string m_note;
+
+        void setNote(std::string note);
+
+    private:
+        Console() {}
+        Console(Console const& other) = delete;
+        Console(Console&& other) = delete;
+    };
+
+
+#define lout Console::getInstance().out()
+#define linfo Console::getInstance().info()
+#define lerr Console::getInstance().error()
+#define lnote Console::getInstance().note()
+#define lend Console::getInstance().end()
+#define lsetnote(x) Console::getInstance().setNote(x)
+
 }

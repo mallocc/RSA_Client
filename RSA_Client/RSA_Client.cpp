@@ -21,12 +21,17 @@ int main(int argc, char* argv[])
 {
 	try
 	{
+		util::lsetnote("sorry link");
 		boost::asio::io_context io_context;
 		tcp::resolver r(io_context);
 		client c(io_context);
 		util::Utilities::genRSAKeyPair(2048);
 		c.setKeys(Keyring("keys/private-key.der", "keys/public-key.der"));
-		if (c.start(r.resolve("81.147.31.211", "32500")))
+
+		std::string ip = util::Utilities::getInput("What IP?", "81.147.31.211");
+		std::string port = util::Utilities::getInput("What port?", "32500");
+		c.setUsername(util::Utilities::getInput("Username?", "mallocc"));
+		if (c.start(r.resolve(ip, port)))
 		{
 			io_context.run();
 		}

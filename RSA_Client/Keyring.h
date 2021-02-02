@@ -30,13 +30,13 @@ namespace net
 				privateKey = util::Utilities::slurp(pri);
 				pri.close();
 
-				std::cout << util::INFO_MSG << "Loaded Keys" << std::endl;
+				util::linfo << "Loaded Keys" << util::lend;
 
 				valid = true;
 			}
 			else
 			{
-				std::cout << util::ERROR_MSG << "No RSA key-pair Found." << std::endl;
+				util::lerr << "No RSA key-pair Found." << util::lend;
 			}
 		}
 

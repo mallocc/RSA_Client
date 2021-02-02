@@ -28,151 +28,224 @@ std::string util::Utilities::slurp(std::ifstream& in)
 
 std::string util::Utilities::sha256(std::string data)
 {
-    CryptoPP::SHA256 hash;
-    uint8_t digest[CryptoPP::SHA256::DIGESTSIZE];
-    std::string message = data;
+	CryptoPP::SHA256 hash;
+	uint8_t digest[CryptoPP::SHA256::DIGESTSIZE];
+	std::string message = data;
 
-    hash.CalculateDigest(digest, (uint8_t*)message.c_str(), message.length());
+	hash.CalculateDigest(digest, (uint8_t*)message.c_str(), message.length());
 
-    CryptoPP::HexEncoder encoder;
-    std::string output;
-    encoder.Attach(new CryptoPP::StringSink(output));
-    encoder.Put(digest, sizeof(digest));
-    encoder.MessageEnd();
+	CryptoPP::HexEncoder encoder;
+	std::string output;
+	encoder.Attach(new CryptoPP::StringSink(output));
+	encoder.Put(digest, sizeof(digest));
+	encoder.MessageEnd();
 
-    boost::algorithm::to_lower(output);
+	boost::algorithm::to_lower(output);
 
-    return output;
+	return output;
 }
 
 void util::Utilities::genRSAKeyPair(uint32_t size)
 {
-    CryptoPP::AutoSeededRandomPool rng;
-    CryptoPP::InvertibleRSAFunction privkey;
-    privkey.Initialize(rng, size);
+	CryptoPP::AutoSeededRandomPool rng;
+	CryptoPP::InvertibleRSAFunction privkey;
+	privkey.Initialize(rng, size);
 
-    CryptoPP::FileSink privkeysink("keys/private-key.der");
-    privkey.DEREncode(privkeysink);
-    privkeysink.MessageEnd();
+	CryptoPP::FileSink privkeysink("keys/private-key.der");
+	privkey.DEREncode(privkeysink);
+	privkeysink.MessageEnd();
 
-    CryptoPP::RSAFunction pubkey(privkey);
+	CryptoPP::RSAFunction pubkey(privkey);
 
-    CryptoPP::FileSink pubkeysink("keys/public-key.der");
-    pubkey.DEREncode(pubkeysink);
-    pubkeysink.MessageEnd();
+	CryptoPP::FileSink pubkeysink("keys/public-key.der");
+	pubkey.DEREncode(pubkeysink);
+	pubkeysink.MessageEnd();
 
-    std::cout << INFO_MSG << "Generated Key Pair" << std::endl;
+	util::linfo << "Generated Key Pair" << util::lend;
 }
 
 std::string util::Utilities::genIV()
 {
-    CryptoPP::AutoSeededRandomPool rng;
-    uint8_t randomBytes[16];
-    rng.GenerateBlock(randomBytes, 16);
-    
-    CryptoPP::Base64Encoder encoder;
-    std::string output;
-    encoder.Attach(new CryptoPP::StringSink(output));
-    encoder.Put(randomBytes, 16);
-    encoder.MessageEnd();
+	CryptoPP::AutoSeededRandomPool rng;
+	uint8_t randomBytes[16];
+	rng.GenerateBlock(randomBytes, 16);
 
-    return output;
+	CryptoPP::Base64Encoder encoder;
+	std::string output;
+	encoder.Attach(new CryptoPP::StringSink(output));
+	encoder.Put(randomBytes, 16);
+	encoder.MessageEnd();
+
+	return output;
 }
 
 void util::Utilities::AESDecryptJson(std::string cipherText, nlohmann::json& j, std::vector<CryptoPP::byte> key, std::vector<CryptoPP::byte> iv)
 {
-    if (key.size() < 16 || iv.size() < 16)
-    {
-        std::cout << ERROR_MSG << "Error, key or IV too small" << std::endl;
-        return;
-    }
-    std::string aes_data;
-    CryptoPP::StringSource decryptor((CryptoPP::byte*) cipherText.c_str(), cipherText.size(), true,
-        new CryptoPP::Base64Decoder(
-            new CryptoPP::StringSink(aes_data)
-        ));
-    std::string decryptedText;
-    try
-    {
-        CryptoPP::CBC_Mode< CryptoPP::AES >::Decryption e;
-        e.SetKeyWithIV(key.data(), 16, iv.data());
+	if (key.size() < 16 || iv.size() < 16)
+	{
+		util::lerr << "Error, key or IV too small" << util::lend;
+		return;
+	}
+	std::string aes_data;
+	CryptoPP::StringSource decryptor((CryptoPP::byte*) cipherText.c_str(), cipherText.size(), true,
+		new CryptoPP::Base64Decoder(
+			new CryptoPP::StringSink(aes_data)
+		));
+	std::string decryptedText;
+	try
+	{
+		CryptoPP::CBC_Mode< CryptoPP::AES >::Decryption e;
+		e.SetKeyWithIV(key.data(), 16, iv.data());
 
-        CryptoPP::StringSource ss(aes_data, true,
-            new CryptoPP::StreamTransformationFilter(e,
-                new CryptoPP::StringSink(decryptedText)
-            ) // StreamTransformationFilter      
-        ); // StringSource
-        try
-        {
-            j = nlohmann::json::parse(decryptedText);
-        }
-        catch (nlohmann::json::exception& e)
-        {
-            std::cout << e.what() << std::endl;
-        }
-    }
-    catch (CryptoPP::Exception& ce)
-    {
-        std::cout << ce.what() << std::endl;
-    }
+		CryptoPP::StringSource ss(aes_data, true,
+			new CryptoPP::StreamTransformationFilter(e,
+				new CryptoPP::StringSink(decryptedText)
+			) // StreamTransformationFilter      
+		); // StringSource
+		try
+		{
+			j = nlohmann::json::parse(decryptedText);
+		}
+		catch (nlohmann::json::exception& e)
+		{
+			std::cout << e.what() << std::endl;
+		}
+	}
+	catch (CryptoPP::Exception& ce)
+	{
+		std::cout << ce.what() << std::endl;
+	}
 }
 
 bool util::Utilities::yesNo(std::string question, bool defaultYes)
 {
-    bool success = false;
+	bool success = false;
 
-    std::string options = defaultYes ? "(Y/n)" : "(y/N)";
+	std::string options = defaultYes ? "(Y/n)" : "(y/N)";
 
-    bool proceed = false;
-    while (!proceed)
-    {
-        std::cout << IN_MSG << question << " " << options << ": ";
-        std::string inString;
-        std::getline(std::cin, inString);
-        if (inString == "y" || inString == "Y" || (defaultYes && (inString.empty())))
-        {
-            proceed = true;
-            success = true;
-        }
-        else if (inString == "n" || inString == "N" || (!defaultYes && (inString.empty())))
-        {
-            proceed = true;
-        }
-        else
-        {
-            std::cout << ERROR_MSG << "'" << inString << "' is not an option of " << options << std::endl;
-        }
-    }
+	bool proceed = false;
+	while (!proceed)
+	{
+		util::lout << ANSI_YELLOW//<< IN_MSG 
+			<< (question.empty() ? "" : question + " ")
+			<< options << " "
+			<< ANSI_RESET << "> ";
+		std::string inString;
+		std::getline(std::cin, inString);
+		if (inString == "y" || inString == "Y" || (defaultYes && (inString.empty())))
+		{
+			proceed = true;
+			success = true;
+		}
+		else if (inString == "n" || inString == "N" || (!defaultYes && (inString.empty())))
+		{
+			proceed = true;
+		}
+		else
+		{
+			util::lerr << "'" << inString << "' is not an option of " << options << util::lend;
+		}
+	}
 
-    return success;
+	return success;
+}
+
+std::string util::Utilities::getInput(std::string question, std::string defaultString, bool noDefault)
+{
+	std::string ret = defaultString;
+
+	std::stringstream ss;
+	if (!defaultString.empty())
+		ss << "(" << defaultString << ")";
+
+	bool proceed = false;
+	while (!proceed)
+	{
+		util::lout << ANSI_YELLOW//<< IN_MSG 
+			<< (question.empty() ? "" : question + " ")
+			<< (ss.str().empty() ? "" : ss.str() + " ")
+			<< ANSI_RESET << "> ";
+		std::string inString;
+		std::getline(std::cin, inString);
+		if (inString != "")
+		{
+			ret = inString;
+			proceed = true;
+		}
+		else if (defaultString != "")
+		{
+			proceed = true;
+		}
+		else if (noDefault)
+		{
+			proceed = true;
+		}
+	}
+
+	return ret;
 }
 
 void util::Utilities::AESEcryptJson(nlohmann::json j, std::vector<CryptoPP::byte> key, std::vector<CryptoPP::byte> iv, std::string& output)
 {
-    std::string plaintext = j.dump();
-    std::string cipherText;
+	std::string plaintext = j.dump();
+	std::string cipherText;
 
-    if (key.size() < 16 || iv.size() < 16)
-    {
-        std::cout << ERROR_MSG << "Error, key or IV too small" << std::endl;
-        return;
-    }
+	if (key.size() < 16 || iv.size() < 16)
+	{
+		util::lerr << "Error, key or IV too small" << util::lend;
+		return;
+	}
 
-    CryptoPP::CBC_Mode< CryptoPP::AES >::Encryption e;
-    e.SetKeyWithIV(key.data(), 16, iv.data());
+	CryptoPP::CBC_Mode< CryptoPP::AES >::Encryption e;
+	e.SetKeyWithIV(key.data(), 16, iv.data());
 
-    CryptoPP::StringSource ss(plaintext, true,
-        new CryptoPP::StreamTransformationFilter(e,
-            new CryptoPP::StringSink(cipherText)
-        ) // StreamTransformationFilter      
-    ); // StringSource
+	CryptoPP::StringSource ss(plaintext, true,
+		new CryptoPP::StreamTransformationFilter(e,
+			new CryptoPP::StringSink(cipherText)
+		) // StreamTransformationFilter      
+	); // StringSource
 
-    std::string b64_crypt;
+	std::string b64_crypt;
 
-    CryptoPP::Base64Encoder encoder(nullptr, 0);
-    encoder.Attach(new CryptoPP::StringSink(b64_crypt));
-    encoder.Put((CryptoPP::byte*) cipherText.c_str(), cipherText.size());
-    encoder.MessageEnd();
+	CryptoPP::Base64Encoder encoder(nullptr, 0);
+	encoder.Attach(new CryptoPP::StringSink(b64_crypt));
+	encoder.Put((CryptoPP::byte*) cipherText.c_str(), cipherText.size());
+	encoder.MessageEnd();
 
-    output = b64_crypt;
+	output = b64_crypt;
+}
+
+std::ostream& util::Console::info()
+{
+	//printf("%c[2K", 27);
+	std::cout << INFO_MSG;
+	return std::cout;
+}
+
+std::ostream& util::Console::error()
+{
+	//printf("%c[2K", 27);
+	std::cout << ERROR_MSG;
+	return std::cout;
+}
+
+std::ostream& util::Console::out()
+{
+	//printf("%c[2K", 27);
+	return std::cout;
+}
+
+std::string util::Console::note()
+{
+	return ""; // m_note + "\r";
+}
+
+std::string util::Console::end()
+{
+	return "\n";// +m_note + "\r";
+}
+
+void util::Console::setNote(std::string note)
+{
+	m_note = note;
 }

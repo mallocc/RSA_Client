@@ -5,6 +5,8 @@
 #include <filters.h>
 #include "modes.h"
 #include <boost/filesystem.hpp>
+#include <conio.h>
+
 
 using util::ANSI_BLUE;
 using util::ANSI_YELLOW;
@@ -58,7 +60,7 @@ bool net::client::start(tcp::resolver::results_type endpoints)
 	}
 	else
 	{
-		std::cout << ANSI_RED << "RSA Keys not set\n" << ANSI_RESET;
+		util::lerr << "RSA Keys not set" << util::lend;
 	}
 
 	return success;
@@ -67,9 +69,20 @@ bool net::client::start(tcp::resolver::results_type endpoints)
 // Called by the user of the client class to initiate the connection process.
 // The endpoints will have been obtained using a tcp::resolver.
 
-void net::client::restart()
+void net::client::restart(bool ask)
 {
-	start_connect(endpoints_.begin());
+	bool success = true;
+
+	if (ask)
+	{
+		success = util::Utilities::yesNo("Would you like to reconnect?");
+	}
+
+	if (success)
+	{
+		stopped_ = false;
+		start_connect(endpoints_.begin());
+	}
 }
 
 // This function terminates all the actors to shut down the connection. It
@@ -83,6 +96,12 @@ void net::client::stop()
 	socket_.close(ignored_error);
 }
 
+void net::client::disconnect()
+{
+	boost::system::error_code ignored_error;
+	socket_.close(ignored_error);
+}
+
 void net::client::setKeys(Keyring keys)
 {
 	clientKeys = keys;
@@ -92,7 +111,7 @@ void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_i
 {
 	if (endpoint_iter != endpoints_.end())
 	{
-		std::cout << INFO_MSG << "Reestablishing connection on " << endpoint_iter->endpoint() << "...\n";
+		util::linfo << "Reestablishing connection on " << endpoint_iter->endpoint() << "..." << util::lend;
 
 		// Start the asynchronous connect operation.
 		socket_.async_connect(endpoint_iter->endpoint(),
@@ -101,11 +120,53 @@ void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_i
 	}
 	else
 	{
-		//// There are no more endpoints to try. Shut down the client.
-		//stop();
-
-		restart();
+		restart(true);
 	}
+}
+
+void net::client::chatTo()
+{
+	std::string to = util::Utilities::getInput("To", "", false);
+	std::string data = util::Utilities::getInput("Message", "", false);
+
+	// create a json message to send
+	nlohmann::json j;
+
+	// load the encrypted encoded Key and IV
+	j[SCHEMA_TYPE] = SCHEMA_TYPE__CRYPT;
+
+	// encrypt the client public key for the server to use
+	nlohmann::json crypt;
+	crypt[SCHEMA_TYPE] = "message";
+	crypt["to"] = macaron::Base64::Encode(to);
+	crypt["data"] = macaron::Base64::Encode(data);
+	std::string cipherText;
+	util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
+	// load the encrypted encoded client public key
+	j[SCHEMA_DATA] = cipherText;
+
+	// send it
+	writePacket(j.dump());
+}
+
+void net::client::getOnline()
+{
+	// create a json message to send
+	nlohmann::json j;
+
+	// load the encrypted encoded Key and IV
+	j[SCHEMA_TYPE] = SCHEMA_TYPE__CRYPT;
+
+	// encrypt the client public key for the server to use
+	nlohmann::json crypt;
+	crypt[SCHEMA_TYPE] = "online";
+	std::string cipherText;
+	util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
+	// load the encrypted encoded client public key
+	j[SCHEMA_DATA] = cipherText;
+
+	// send it
+	writePacket(j.dump());
 }
 
 void net::client::handleInputCommand(std::string command)
@@ -125,6 +186,26 @@ void net::client::handleInputCommand(std::string command)
 
 		writePacket(j.dump());
 	}
+	else if (command == "dc" || command == "disconnect" || command == "stop")
+	{
+		stop();
+	}
+	else if (command == "note")
+	{
+		util::lsetnote(util::Utilities::getInput("Change note to?", "default"));
+	}
+
+	else if (command == "to")
+	{
+		chatTo();
+	}
+
+	else if (command == "online")
+	{
+		getOnline();
+	}
+
+
 	else
 	{
 		sendEcho(command);
@@ -134,15 +215,14 @@ void net::client::handleInputCommand(std::string command)
 void net::client::startInputThread()
 {
 	auto keyboardInterrupt = [&]() {
+		int count = 0;
 		while (true)
-		{
-			if (GetAsyncKeyState(VK_ESCAPE))
+		{			
+			if (_getch() == 0x1b)
 			{
-				std::cout << "> ";
-				std::string inString;
-				std::getline(std::cin, inString);
-				handleInputCommand(inString);
+				handleInputCommand(util::Utilities::getInput("", "", true));
 			}
+
 			using namespace std::chrono_literals;
 			std::this_thread::sleep_for(100ms);
 		}
@@ -162,7 +242,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// the timeout handler must have run first.
 	if (!socket_.is_open())
 	{
-		std::cout << ERROR_MSG << "Connect timed out\n";
+		util::lerr << "Connect timed out" << util::lend;
 
 		// Try the next available endpoint.
 		start_connect(++endpoint_iter);
@@ -171,7 +251,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// Check if the connect operation failed before the deadline expired.
 	else if (error)
 	{
-		std::cout << ERROR_MSG << "Connect error: " << error.message() << "\n";
+		util::lerr << "Connect error: " << error.message() << util::lend;
 
 		// We need to close the socket used in the previous connection attempt
 		// before starting a new one.
@@ -184,7 +264,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// Otherwise we have successfully established a connection.
 	else
 	{
-		std::cout << INFO_MSG << "Connected to " << endpoint_iter->endpoint() << "\n";
+		util::linfo << "Connected to " << endpoint_iter->endpoint() << util::lend;
 
 		// Start the input actor.
 		start_read();
@@ -222,23 +302,26 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 	}
 	else
 	{
-		std::cout << ERROR_MSG << "Error on receive: " << error.message() << "\n";
+		util::lerr << "Error on receive: " << error.message() << util::lend;
 
-		//stop();
-
-		restart();
+		restart(true);
 	}
 
 }
 
 void net::client::printServerMessage(std::string type, std::string data)
 {
-	std::cout << "[" << ANSI_MAGENTA << type << ANSI_RESET << "]: " << data << std::endl;
+	//printf("%c[2K", 27);
+	util::lout << "[" << ANSI_MAGENTA << type << ANSI_RESET << "]: " << data << util::lend;
+	//std::cout << "\033[3m" << "[Press ESC to enter command]\r";
 }
 
 void net::client::printClientMessage(std::string type, std::string data)
 {
-	std::cout << "[" << ANSI_CYAN << type << ANSI_RESET << "]: " << data << std::endl;
+	//printf("%c[2K", 27);
+	//std::cout << "[" << ANSI_CYAN << type << ANSI_RESET << "]: " << data << std::endl;
+	//std::cout << "\033[3m" << "[Press ESC to enter command]\r";
+	util::lout << "[" << ANSI_CYAN << type << ANSI_RESET << "]: " << data << util::lend;
 }
 
 void net::client::handleWelcome(std::string data)
@@ -251,7 +334,7 @@ void net::client::handleWelcome(std::string data)
 
 	// store service finger print for checking later
 	serverFingerPrint = util::Utilities::sha256(decoded);
-	std::cout << INFO_MSG << "Server fingerprint <" << ANSI_CYAN_BG << serverFingerPrint << ANSI_RESET << ">" << std::endl;
+	util::linfo << "Server fingerprint <" << ANSI_CYAN_BG << serverFingerPrint << ANSI_RESET << ">" << util::lend;
 
 	// retrieve the public key data from the message
 	CryptoPP::StringSource ss((const CryptoPP::byte*) decoded.c_str(), decoded.size(), true);
@@ -281,7 +364,7 @@ void net::client::handleWelcome(std::string data)
 		std::string serverFingerPrintFromFile = util::Utilities::sha256(fileb);
 		if (serverFingerPrint != serverFingerPrintFromFile)
 		{
-			std::cout << ERROR_MSG << "Server fingerprint does not match keyring!" << std::endl;
+			util::lerr << "Server fingerprint does not match keyring!" << util::lend;
 
 			// let the user decide if they want to update the public key
 			if (util::Utilities::yesNo("Are you sure you want to connect?", false))
@@ -289,11 +372,11 @@ void net::client::handleWelcome(std::string data)
 				CryptoPP::FileSink pubkeysink(filename.c_str());
 				publicKey.DEREncode(pubkeysink);
 				pubkeysink.MessageEnd();
-				std::cout << INFO_MSG << "Keyring updated." << std::endl;
+				util::linfo << "Keyring updated." << util::lend;
 			}
 			else
 			{
-				std::cout << ERROR_MSG << "Key rejected, not updating key." << std::endl;
+				util::lerr << "Key rejected, not updating key." << util::lend;
 
 				stop();
 			}
@@ -347,6 +430,7 @@ void net::client::handleWelcome(std::string data)
 	// encrypt the client public key for the server to use
 	nlohmann::json crypt;
 	crypt[SCHEMA_PUBLIC_KEY] = macaron::Base64::Encode(clientKeys.publicKey);
+	crypt["username"] = macaron::Base64::Encode(username);
 	std::string cipherText;
 	util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
 	// load the encrypted encoded client public key
@@ -354,6 +438,36 @@ void net::client::handleWelcome(std::string data)
 
 	// send it
 	writePacket(j.dump());
+}
+
+void net::client::handleChatFrom(nlohmann::json j)
+{
+	std::string type;
+	if (j.contains(SCHEMA_TYPE))
+	{
+		type = j[SCHEMA_TYPE];
+	}
+
+	if (type == "message")
+	{
+
+		std::string username;
+
+		if (j.contains("from"))
+		{
+			macaron::Base64::Decode(j["from"], username);
+		}
+
+		std::string message;
+
+		if (j.contains("data"))
+		{
+			macaron::Base64::Decode(j["data"], message);
+		}
+
+		printServerMessage("From", username + ": " + message);
+
+	}
 }
 
 void net::client::readMessage(std::string messageData)
@@ -386,6 +500,8 @@ void net::client::readMessage(std::string messageData)
 				util::Utilities::AESDecryptJson(j[SCHEMA_DATA], crypt, sessionKey, sessionIV);
 
 				printServerMessage(type, crypt.dump(2));
+
+				handleChatFrom(crypt);
 			}
 			else if (type == SCHEMA_TYPE__ECHO)
 			{
@@ -475,8 +591,15 @@ void net::client::handle_write(const boost::system::error_code& error)
 	}
 	else
 	{
-		std::cout << ERROR_MSG << "Error on writing: " << error.message() << "\n";
+		util::lerr << "Error on writing: " << error.message() << "\n";
 
 		//stop();
 	}
 }
+
+void net::client::setUsername(std::string username)
+{
+	this->username = username;
+}
+
+
