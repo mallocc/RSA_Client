@@ -52,6 +52,7 @@ bool net::client::start(tcp::resolver::results_type endpoints)
 
 	if (clientKeys.valid)
 	{
+		startInputThread();
 		// Start the connect actor.
 		endpoints_ = endpoints;
 		restart();
@@ -220,11 +221,11 @@ void net::client::startInputThread()
 		{			
 			if (_getch() == 0x1b)
 			{
-				handleInputCommand(util::Utilities::getInput("", "", true));
+				handleInputCommand(util::Utilities::getInput(""));
 			}
 
 			using namespace std::chrono_literals;
-			std::this_thread::sleep_for(100ms);
+			std::this_thread::sleep_for(1ms);
 		}
 	};
 
@@ -269,7 +270,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 		// Start the input actor.
 		start_read();
 
-		startInputThread();
+
 	}
 }
 
@@ -303,7 +304,6 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 	else
 	{
 		util::lerr << "Error on receive: " << error.message() << util::lend;
-
 		restart(true);
 	}
 

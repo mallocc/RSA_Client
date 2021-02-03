@@ -126,7 +126,7 @@ bool util::Utilities::yesNo(std::string question, bool defaultYes)
 	bool proceed = false;
 	while (!proceed)
 	{
-		util::lout << ANSI_YELLOW//<< IN_MSG 
+		std::cout << ANSI_YELLOW//<< IN_MSG 
 			<< (question.empty() ? "" : question + " ")
 			<< options << " "
 			<< ANSI_RESET << "> ";
@@ -161,7 +161,7 @@ std::string util::Utilities::getInput(std::string question, std::string defaultS
 	bool proceed = false;
 	while (!proceed)
 	{
-		util::lout << ANSI_YELLOW//<< IN_MSG 
+		std::cout << ANSI_YELLOW//<< IN_MSG 
 			<< (question.empty() ? "" : question + " ")
 			<< (ss.str().empty() ? "" : ss.str() + " ")
 			<< ANSI_RESET << "> ";
