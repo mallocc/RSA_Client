@@ -58,16 +58,23 @@ namespace net
 		void setKeys(Keyring keys);
 		void setUsername(std::string username);
 
-	private:
 		void start_connect(tcp::resolver::results_type::iterator endpoint_iter);
 
-		void chatTo();
+		void handleCommandCreate(util::Args args);
 
-		void getOnline();
+		void handleCommandRemove(util::Args args);
 
-		void handleInputCommand(std::string command);
+		void handleCommandSubscribe(util::Args args);
 
-		void startInputThread();
+		void handleCommandUnsubscribe(util::Args args);
+
+		void handleCommandTo(util::Args args);
+
+		void handleCommandOnline(util::Args args);
+
+		void handleCommandRooms(util::Args args);
+
+		void handleCommandPing(util::Args args);
 
 		void handle_connect(const boost::system::error_code& error,
 			tcp::resolver::results_type::iterator endpoint_iter);
@@ -76,16 +83,15 @@ namespace net
 
 		void handle_read(const boost::system::error_code& error, std::size_t n);
 
-		void printServerMessage(std::string type, std::string data);
-		void printClientMessage(std::string type, std::string data);
+		void dumpMessage(nlohmann::json j);
 
-		void handleWelcome(std::string data);
+		void processWelcome(std::string data);
 
-		void handleChatFrom(nlohmann::json j);
+		void processEncryptedMessage(nlohmann::json j);
 
-		void readMessage(std::string messageData);
+		void processMessage(std::string messageData);
 
-		void sendEcho(std::string message);
+		void sendJson(nlohmann::json j);
 
 		void writePacket(std::string response);
 
@@ -113,6 +119,8 @@ namespace net
 		std::string serverFingerPrint;
 
 		std::string username;
+
+		std::thread interruptThread;
 
 	};
 

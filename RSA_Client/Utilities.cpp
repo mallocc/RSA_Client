@@ -235,6 +235,13 @@ std::ostream& util::Console::out()
 	return std::cout;
 }
 
+std::ostream& util::Console::dump()
+{
+	//printf("%c[2K", 27);
+	std::cout << DUMP_MSG;
+	return std::cout;
+}
+
 std::string util::Console::note()
 {
 	return ""; // m_note + "\r";

@@ -30,7 +30,7 @@ namespace
 	const std::string SCHEMA_PUBLIC_KEY = "public_key";
 
 	const std::string SCHEMA_TYPE__RSA_PUB = "RSA_PUB";
-	const std::string SCHEMA_TYPE__WELCOME= "welcome";
+	const std::string SCHEMA_TYPE__WELCOME = "welcome";
 	const std::string SCHEMA_TYPE__ECHO = "echo";
 	const std::string SCHEMA_TYPE__ANNOUNCE = "announce";
 	const std::string SCHEMA_TYPE__CRYPT = "crypt";
@@ -52,9 +52,9 @@ bool net::client::start(tcp::resolver::results_type endpoints)
 
 	if (clientKeys.valid)
 	{
-		startInputThread();
 		// Start the connect actor.
 		endpoints_ = endpoints;
+
 		restart();
 
 		success = true;
@@ -73,11 +73,6 @@ bool net::client::start(tcp::resolver::results_type endpoints)
 void net::client::restart(bool ask)
 {
 	bool success = true;
-
-	if (ask)
-	{
-		success = util::Utilities::yesNo("Would you like to reconnect?");
-	}
 
 	if (success)
 	{
@@ -119,64 +114,125 @@ void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_i
 			std::bind(&client::handle_connect,
 				this, _1, endpoint_iter));
 	}
+}
+
+void net::client::handleCommandCreate(util::Args args)
+{
+	if (args.size() == 1)
+	{
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "create";
+		crypt["create"] = macaron::Base64::Encode(util::Utilities::getInput("Type", "", false));
+		crypt["name"] = macaron::Base64::Encode(util::Utilities::getInput("Name", "", false));
+
+		sendJson(crypt);
+	}
 	else
 	{
-		restart(true);
+		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
 	}
 }
 
-void net::client::chatTo()
+void net::client::handleCommandRemove(util::Args args)
 {
-	std::string to = util::Utilities::getInput("To", "", false);
-	std::string data = util::Utilities::getInput("Message", "", false);
-
-	// create a json message to send
-	nlohmann::json j;
-
-	// load the encrypted encoded Key and IV
-	j[SCHEMA_TYPE] = SCHEMA_TYPE__CRYPT;
-
-	// encrypt the client public key for the server to use
-	nlohmann::json crypt;
-	crypt[SCHEMA_TYPE] = "message";
-	crypt["to"] = macaron::Base64::Encode(to);
-	crypt["data"] = macaron::Base64::Encode(data);
-	std::string cipherText;
-	util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
-	// load the encrypted encoded client public key
-	j[SCHEMA_DATA] = cipherText;
-
-	// send it
-	writePacket(j.dump());
-}
-
-void net::client::getOnline()
-{
-	// create a json message to send
-	nlohmann::json j;
-
-	// load the encrypted encoded Key and IV
-	j[SCHEMA_TYPE] = SCHEMA_TYPE__CRYPT;
-
-	// encrypt the client public key for the server to use
-	nlohmann::json crypt;
-	crypt[SCHEMA_TYPE] = "online";
-	std::string cipherText;
-	util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
-	// load the encrypted encoded client public key
-	j[SCHEMA_DATA] = cipherText;
-
-	// send it
-	writePacket(j.dump());
-}
-
-void net::client::handleInputCommand(std::string command)
-{
-	if (command == "ping")
+	if (args.size() == 1)
 	{
-		std::stringstream ss;
-		ss << "pinging server...";
-		printClientMessage(command, ss.str());
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "remove";
+		crypt["remove"] = macaron::Base64::Encode(util::Utilities::getInput("Type", "", false));
+		crypt["name"] = macaron::Base64::Encode(util::Utilities::getInput("Name", "", false));
+
+		sendJson(crypt);
+	}
+	else
+	{
+		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+	}
+}
+
+void net::client::handleCommandSubscribe(util::Args args)
+{
+	if (args.size() == 1)
+	{
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "subscribe";
+		crypt["data"] = macaron::Base64::Encode(util::Utilities::getInput("Room name", "", false));
+
+		sendJson(crypt);
+	}
+	else
+	{
+		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+	}
+}
+
+void net::client::handleCommandUnsubscribe(util::Args args)
+{
+	if (args.size() == 1)
+	{
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "unsubscribe";
+		crypt["data"] = macaron::Base64::Encode(util::Utilities::getInput("Room name", "", false));
+
+		sendJson(crypt);
+	}
+	else
+	{
+		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+	}
+}
+
+void net::client::handleCommandTo(util::Args args)
+{
+	if (args.size() == 2)
+	{
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "message";
+		crypt["to"] = macaron::Base64::Encode(args[1]);
+		crypt["data"] = macaron::Base64::Encode(util::Utilities::getInput("Message", "", false));
+
+		sendJson(crypt);
+	}
+	else
+	{
+		util::lerr << "Incorrect argument count. Should be 2." << std::endl;
+	}
+}
+
+void net::client::handleCommandOnline(util::Args args)
+{
+	if (args.size() == 1)
+	{
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "online";
+
+		sendJson(crypt);
+	}
+	else
+	{
+		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+	}
+}
+
+void net::client::handleCommandRooms(util::Args args)
+{
+	if (args.size() == 1)
+	{
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "rooms";
+
+		sendJson(crypt);
+	}
+	else
+	{
+		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+	}
+}
+
+void net::client::handleCommandPing(util::Args args)
+{
+	auto ping = [&]() {
+		util::linfo << "Sent ping to server." << std::endl;
 
 		nlohmann::json j;
 		j["type"] = "cping";
@@ -186,51 +242,16 @@ void net::client::handleInputCommand(std::string command)
 		j["ts"] = ms;
 
 		writePacket(j.dump());
-	}
-	else if (command == "dc" || command == "disconnect" || command == "stop")
-	{
-		stop();
-	}
-	else if (command == "note")
-	{
-		util::lsetnote(util::Utilities::getInput("Change note to?", "default"));
-	}
-
-	else if (command == "to")
-	{
-		chatTo();
-	}
-
-	else if (command == "online")
-	{
-		getOnline();
-	}
-
-
-	else
-	{
-		sendEcho(command);
-	}
-}
-
-void net::client::startInputThread()
-{
-	auto keyboardInterrupt = [&]() {
-		int count = 0;
-		while (true)
-		{			
-			if (_getch() == 0x1b)
-			{
-				handleInputCommand(util::Utilities::getInput(""));
-			}
-
-			using namespace std::chrono_literals;
-			std::this_thread::sleep_for(1ms);
-		}
 	};
 
-	std::thread interruptThread(keyboardInterrupt);
-	interruptThread.detach();
+	if (args.size() == 1)
+	{
+		ping();
+	}
+	else
+	{
+		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+	}
 }
 
 void net::client::handle_connect(const boost::system::error_code& error, tcp::resolver::results_type::iterator endpoint_iter)
@@ -247,6 +268,8 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 
 		// Try the next available endpoint.
 		start_connect(++endpoint_iter);
+
+		stop();
 	}
 
 	// Check if the connect operation failed before the deadline expired.
@@ -260,6 +283,8 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 
 		// Try the next available endpoint.
 		start_connect(++endpoint_iter);
+
+		stop();
 	}
 
 	// Otherwise we have successfully established a connection.
@@ -269,8 +294,6 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 
 		// Start the input actor.
 		start_read();
-
-
 	}
 }
 
@@ -297,34 +320,25 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 
 		std::string message = std::string(packet_body, dataSize);
 
-		readMessage(message);
+		processMessage(message);
 
 		start_read();
 	}
 	else
 	{
 		util::lerr << "Error on receive: " << error.message() << util::lend;
-		restart(true);
+
+		stop();
 	}
 
 }
 
-void net::client::printServerMessage(std::string type, std::string data)
+void net::client::dumpMessage(nlohmann::json j)
 {
-	//printf("%c[2K", 27);
-	util::lout << "[" << ANSI_MAGENTA << type << ANSI_RESET << "]: " << data << util::lend;
-	//std::cout << "\033[3m" << "[Press ESC to enter command]\r";
+	util::ldump << j.dump(2) << std::endl;
 }
 
-void net::client::printClientMessage(std::string type, std::string data)
-{
-	//printf("%c[2K", 27);
-	//std::cout << "[" << ANSI_CYAN << type << ANSI_RESET << "]: " << data << std::endl;
-	//std::cout << "\033[3m" << "[Press ESC to enter command]\r";
-	util::lout << "[" << ANSI_CYAN << type << ANSI_RESET << "]: " << data << util::lend;
-}
-
-void net::client::handleWelcome(std::string data)
+void net::client::processWelcome(std::string data)
 {
 	serverPublicKey = data;
 
@@ -364,22 +378,22 @@ void net::client::handleWelcome(std::string data)
 		std::string serverFingerPrintFromFile = util::Utilities::sha256(fileb);
 		if (serverFingerPrint != serverFingerPrintFromFile)
 		{
-			util::lerr << "Server fingerprint does not match keyring!" << util::lend;
+			util::lerr << "Server fingerprint does not match keyring! Use command 'forget-server <ip>' to accept new fingerprint." << util::lend;
 
-			// let the user decide if they want to update the public key
-			if (util::Utilities::yesNo("Are you sure you want to connect?", false))
-			{
-				CryptoPP::FileSink pubkeysink(filename.c_str());
-				publicKey.DEREncode(pubkeysink);
-				pubkeysink.MessageEnd();
-				util::linfo << "Keyring updated." << util::lend;
-			}
-			else
-			{
-				util::lerr << "Key rejected, not updating key." << util::lend;
+			//// let the user decide if they want to update the public key
+			//if (util::Utilities::yesNo("Are you sure you want to connect?", false))
+			//{
+			//	CryptoPP::FileSink pubkeysink(filename.c_str());
+			//	publicKey.DEREncode(pubkeysink);
+			//	pubkeysink.MessageEnd();
+			//	util::linfo << "Keyring updated." << util::lend;
+			//}
+			//else
+			//{
+			//	util::lerr << "Key rejected, not updating key." << util::lend;
 
-				stop();
-			}
+			//	stop();
+			//}
 		}
 	}
 
@@ -431,6 +445,7 @@ void net::client::handleWelcome(std::string data)
 	nlohmann::json crypt;
 	crypt[SCHEMA_PUBLIC_KEY] = macaron::Base64::Encode(clientKeys.publicKey);
 	crypt["username"] = macaron::Base64::Encode(username);
+
 	std::string cipherText;
 	util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
 	// load the encrypted encoded client public key
@@ -440,7 +455,7 @@ void net::client::handleWelcome(std::string data)
 	writePacket(j.dump());
 }
 
-void net::client::handleChatFrom(nlohmann::json j)
+void net::client::processEncryptedMessage(nlohmann::json j)
 {
 	std::string type;
 	if (j.contains(SCHEMA_TYPE))
@@ -450,14 +465,6 @@ void net::client::handleChatFrom(nlohmann::json j)
 
 	if (type == "message")
 	{
-
-		std::string username;
-
-		if (j.contains("from"))
-		{
-			macaron::Base64::Decode(j["from"], username);
-		}
-
 		std::string message;
 
 		if (j.contains("data"))
@@ -465,12 +472,91 @@ void net::client::handleChatFrom(nlohmann::json j)
 			macaron::Base64::Decode(j["data"], message);
 		}
 
-		printServerMessage("From", username + ": " + message);
+		std::string room;
 
+		if (j.contains("room"))
+		{
+			macaron::Base64::Decode(j["room"], room);
+
+			std::cout << room << ": ";
+		}
+
+		std::string from;
+
+		if (j.contains("from"))
+		{
+			macaron::Base64::Decode(j["from"], from);
+
+			std::cout << from << ": " << message << std::endl;
+		}
+	}
+	else if (type == "online")
+	{
+		if (j.contains("users"))
+		{
+			std::cout << "Users online: " << std::endl;
+
+			nlohmann::json users = j["users"];
+			// range-based for
+			for (auto& element : users) {
+				std::string user;
+				macaron::Base64::Decode(element, user);
+				std::cout << '\t' << user << std::endl;
+			}
+
+			std::cout << std::endl;
+		}
+	}
+	else if (type == "rooms")
+	{
+		if (j.contains("rooms"))
+		{
+			std::cout << "Rooms: " << std::endl;
+
+			nlohmann::json rooms = j["rooms"];
+			// range-based for
+			for (auto& element : rooms) {
+				std::string room;
+				macaron::Base64::Decode(element, room);
+				std::cout << '\t' << room << std::endl;
+			}
+
+			std::cout << std::endl;
+		}
+	}
+	else if (type == "notice")
+	{
+		std::string data;
+
+		if (j.contains("data"))
+		{
+			macaron::Base64::Decode(j["data"], data);
+		}
+
+		std::cout << "Server notice: " << data << std::endl;
+	}
+
+	else if (type == "announce_response")
+	{
+		std::string data;
+
+		if (j.contains("data"))
+		{
+			data = j["data"];
+		}
+
+		if (data != "OK")
+		{
+			util::lerr << "Server refused login." << std::endl;
+		}
+	}
+	else
+	{
+		dumpMessage(j);
 	}
 }
 
-void net::client::readMessage(std::string messageData)
+void net::client::processMessage(std::string messageData)
 {
 	try
 	{
@@ -486,34 +572,22 @@ void net::client::readMessage(std::string messageData)
 
 		if (j.contains(SCHEMA_DATA))
 		{
-			std::string decodedData;
 			data = j[SCHEMA_DATA];
-			macaron::Base64::Decode(data, decodedData);
 
 			if (type == SCHEMA_TYPE__WELCOME)
 			{
-				handleWelcome(data);
+				processWelcome(data);
 			}
 			else if (type == SCHEMA_TYPE__CRYPT)
-			{				
+			{
 				nlohmann::json crypt;
 				util::Utilities::AESDecryptJson(j[SCHEMA_DATA], crypt, sessionKey, sessionIV);
 
-				printServerMessage(type, crypt.dump(2));
-
-				handleChatFrom(crypt);
-			}
-			else if (type == SCHEMA_TYPE__ECHO)
-			{
-				printServerMessage(type, decodedData);
-			}
-			else if (type == SCHEMA_TYPE__ANNOUNCE)
-			{
-				printServerMessage(type, decodedData);
+				processEncryptedMessage(crypt);
 			}
 			else
 			{
-				printServerMessage(type, data);
+				dumpMessage(j);
 			}
 		}
 
@@ -522,8 +596,7 @@ void net::client::readMessage(std::string messageData)
 			if (type == "ping")
 			{
 				writePacket(j.dump());
-				printServerMessage(type, "ping from server");
-			}			
+			}
 			else if (type == "cping")
 			{
 				uint64_t ts_ = j["ts"];
@@ -532,7 +605,7 @@ void net::client::readMessage(std::string messageData)
 					).count();
 				std::stringstream ss;
 				ss << (ms - ts_) / 2 << "ms";
-				printServerMessage(type, ss.str());
+				util::linfo << "Ping returned in " << ss.str() << std::endl;
 			}
 		}
 
@@ -543,23 +616,22 @@ void net::client::readMessage(std::string messageData)
 	}
 }
 
-void net::client::sendEcho(std::string message)
+void net::client::sendJson(nlohmann::json crypt)
 {
-	try
-	{
-		printClientMessage("echo", message);
+	// create a json message to send
+	nlohmann::json j;
 
-		nlohmann::json j;
+	// load the encrypted encoded Key and IV
+	j[SCHEMA_TYPE] = SCHEMA_TYPE__CRYPT;
 
-		j[SCHEMA_TYPE] = SCHEMA_TYPE__ECHO;
-		j[SCHEMA_DATA] = macaron::Base64::Encode(message);
+	// encrypt the client public key for the server to use
+	std::string cipherText;
+	util::Utilities::AESEcryptJson(crypt, sessionKey, sessionIV, cipherText);
+	// load the encrypted encoded client public key
+	j[SCHEMA_DATA] = cipherText;
 
-		writePacket(j.dump());
-	}
-	catch (nlohmann::json::exception& e)
-	{
-		std::cout << e.what() << std::endl;
-	}
+	// send it
+	writePacket(j.dump());
 }
 
 void net::client::writePacket(std::string response)

@@ -24,8 +24,11 @@ namespace util
     const std::string ANSI_WHITE = "\033[01;37m";
 
     const std::string ERROR_MSG = "[" + ANSI_RED + "ERROR" + ANSI_RESET + "]: ";
-    const std::string INFO_MSG = "[" + ANSI_WHITE + "INFO" + ANSI_RESET + "]: ";
+    const std::string INFO_MSG = "[" + ANSI_GREEN + "INFO" + ANSI_RESET + "]: ";
     const std::string IN_MSG = "[" + ANSI_YELLOW + "INPUT" + ANSI_RESET + "]: ";
+    const std::string DUMP_MSG = "[" + ANSI_WHITE + "DUMP" + ANSI_RESET + "]: ";
+
+    typedef std::vector<std::string> Args;
 
     class Utilities
     {
@@ -53,6 +56,8 @@ namespace util
 
         std::ostream& out();
 
+        std::ostream& dump();
+
         std::string note();
 
         std::string end();
@@ -77,6 +82,7 @@ namespace util
 
 
 #define lout Console::getInstance().out()
+#define ldump Console::getInstance().dump()
 #define linfo Console::getInstance().info()
 #define lerr Console::getInstance().error()
 #define lnote Console::getInstance().note()
