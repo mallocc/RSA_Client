@@ -107,11 +107,11 @@ int main(int argc, char* argv[])
 								c.stop();
 								io_context.stop();
 							}
-							else if (command == "to")
+							else if (command == "to" || command == "send" || command == "message" || command == "msg")
 							{
 								c.handleCommandTo(args);
 							}
-							else if (command == "online")
+							else if (command == "online" || command == "who")
 							{
 								c.handleCommandOnline(args);
 							}
@@ -119,11 +119,11 @@ int main(int argc, char* argv[])
 							{
 								c.handleCommandRooms(args);
 							}
-							else if (command == "subscribe")
+							else if (command == "subscribe" || command == "join")
 							{
 								c.handleCommandSubscribe(args);
 							}
-							else if (command == "unsubscribe")
+							else if (command == "unsubscribe" || command == "leave")
 							{
 								c.handleCommandUnsubscribe(args);
 							}

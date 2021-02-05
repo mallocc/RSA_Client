@@ -533,7 +533,7 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 			macaron::Base64::Decode(j["data"], data);
 		}
 
-		std::cout << "Server notice: " << data << std::endl;
+		std::cout << data << std::endl;
 	}
 
 	else if (type == "announce_response")
