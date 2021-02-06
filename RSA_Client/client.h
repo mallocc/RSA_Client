@@ -60,6 +60,12 @@ namespace net
 
 		void start_connect(tcp::resolver::results_type::iterator endpoint_iter);
 
+		bool isStreaming();
+
+		void handleCommandSetStream(util::Args args);
+
+		void handleCommandInlineMessage(std::string message);
+
 		void handleCommandCreate(util::Args args);
 
 		void handleCommandRemove(util::Args args);
@@ -99,7 +105,7 @@ namespace net
 
 		void handle_write(const boost::system::error_code& error);
 
-
+		void dumpConsoleStream();
 	private:
 		bool stopped_ = false;
 		tcp::resolver::results_type endpoints_;
@@ -121,6 +127,17 @@ namespace net
 		std::string username;
 
 		std::thread interruptThread;
+
+		std::string stream;
+
+		std::stringstream out;
+
+		std::stringstream& err();
+		std::stringstream& info();
+		std::stringstream& in();
+		std::stringstream& dump();
+
+
 
 	};
 

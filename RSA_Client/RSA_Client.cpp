@@ -40,20 +40,19 @@ int main(int argc, char* argv[])
 		SetConsoleMode(hOut, dwMode);
 #endif
 
-		//// get the saved server public key if it exists
-		//std::string filename = "client.cfg";
-		//if (!boost::filesystem::exists(filename))
-		//{
-		//	// doesnt exist so store the one we got given
-		//	std::pubkeysink(filename.c_str());
-		//	
-		//}
+		// get the saved server public key if it exists
+		std::string filename = "client.cfg";
+		if (!boost::filesystem::exists(filename))
+		{
+			//boost::b
+			
+		}
 
-
+		 
 		util::Utilities::genRSAKeyPair(2048);
 		c.setKeys(Keyring("keys/private-key.der", "keys/public-key.der"));
-
-		std::string ip = util::Utilities::getInput("What IP?", "81.147.31.211");
+		//81.147.31.211
+		std::string ip = util::Utilities::getInput("What IP?", "192.168.1.226");
 		std::string port = util::Utilities::getInput("What port?", "32500");
 		c.setUsername(util::Utilities::getInput("Username?", "mallocc"));
 
@@ -71,13 +70,17 @@ int main(int argc, char* argv[])
 		int count = 0;
 		while (true)
 		{
-			if (_getch() == 0x1b)
+			//c.dumpConsoleStream();
+			// will process input if in stream, otherwise input is triggered from ESC
+			// using side effects
+			if (c.isStreaming() || _getch() == 0x1b)
 			{
 				std::string input = util::Utilities::getInput("");
 				if (!input.empty())
 				{
-					//if (input[0] == '!')
+					if (input[0] == '!')
 					{
+						input.erase(0, 1);
 						std::stringstream ss(input);
 						std::istream_iterator<std::string> begin(ss);
 						std::istream_iterator<std::string> end;
@@ -135,6 +138,10 @@ int main(int argc, char* argv[])
 							{
 								c.handleCommandRemove(args);
 							}
+							else if (command == "stream")
+							{
+								c.handleCommandSetStream(args);
+							}
 							else if (command == "forget-server")
 							{
 								std::string ip = args[1];
@@ -147,6 +154,10 @@ int main(int argc, char* argv[])
 								util::lerr << "'" << command << "' is not a valid command." << std::endl;
 							}							
 						}
+					}
+					else
+					{
+						c.handleCommandInlineMessage(input);
 					}
 				}
 			}

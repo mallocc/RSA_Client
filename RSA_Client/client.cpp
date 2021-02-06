@@ -116,6 +116,36 @@ void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_i
 	}
 }
 
+bool net::client::isStreaming()
+{
+	return !stream.empty();
+}
+
+void net::client::handleCommandSetStream(util::Args args)
+{
+	if (args.size() == 1)
+	{
+		stream = util::Utilities::getInput("Stream", "", false);
+	}
+	else
+	{
+		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+	}
+}
+
+void net::client::handleCommandInlineMessage(std::string message)
+{
+	if (!stream.empty())
+	{
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "message";
+		crypt["to"] = macaron::Base64::Encode(stream);
+		crypt["data"] = macaron::Base64::Encode(message);
+
+		sendJson(crypt);
+	}
+}
+
 void net::client::handleCommandCreate(util::Args args)
 {
 	if (args.size() == 1)
@@ -156,9 +186,13 @@ void net::client::handleCommandSubscribe(util::Args args)
 	{
 		nlohmann::json crypt;
 		crypt[SCHEMA_TYPE] = "subscribe";
-		crypt["data"] = macaron::Base64::Encode(util::Utilities::getInput("Room name", "", false));
+
+		std::string roomName = util::Utilities::getInput("Room name", "", false);
+		crypt["data"] = macaron::Base64::Encode(roomName);
 
 		sendJson(crypt);
+
+		stream = roomName;
 	}
 	else
 	{
@@ -175,6 +209,8 @@ void net::client::handleCommandUnsubscribe(util::Args args)
 		crypt["data"] = macaron::Base64::Encode(util::Utilities::getInput("Room name", "", false));
 
 		sendJson(crypt);
+
+		stream.clear();
 	}
 	else
 	{
@@ -547,7 +583,7 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 
 		if (data != "OK")
 		{
-			util::lerr << "Server refused login." << std::endl;
+			util::lerr << "Server refused login. Reason: " << data << std::endl;
 		}
 	}
 	else
@@ -667,6 +703,36 @@ void net::client::handle_write(const boost::system::error_code& error)
 
 		//stop();
 	}
+}
+
+std::stringstream& net::client::err()
+{
+	out << util::ERROR_MSG;
+	return out;
+}
+
+std::stringstream& net::client::info()
+{
+	out << util::INFO_MSG;
+	return out;
+}
+
+std::stringstream& net::client::in()
+{
+	out << util::IN_MSG;
+	return out;
+}
+
+std::stringstream& net::client::dump()
+{
+	out << util::DUMP_MSG;
+	return out;
+}
+
+void net::client::dumpConsoleStream()
+{
+	std::cout << out.str();
+	out.str("");
 }
 
 void net::client::setUsername(std::string username)
