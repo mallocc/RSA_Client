@@ -11,7 +11,7 @@
 #include <iostream>
 #include <string>
 #include <queue>
-
+#include <map>
 #define WIN32_LEAN_AND_MEAN 
 #include <Windows.h>
 #pragma comment(lib, "User32.lib")
@@ -31,6 +31,35 @@ using std::placeholders::_2;
 
 namespace net
 {
+
+	class File
+	{
+	public:
+		File() {}
+		File(nlohmann::json j)
+		{
+			if (j.contains("filename"))
+			{
+				filename = j["filename"];
+			}
+			if (j.contains("uid"))
+			{
+				uid = j["uid"];
+			}
+			if (j.contains("size"))
+			{
+				size = j["size"];
+			}
+		}
+
+		std::string filename;
+		std::string uid;
+		size_t size = 0;
+		size_t chunkSize = 0;
+		bool downloading = false;
+		std::vector<uint8_t> data;
+	};
+
 	class client
 	{
 	public:
@@ -62,6 +91,12 @@ namespace net
 
 		bool isStreaming();
 
+		void getChunk(std::string uid, size_t start = 0, size_t chunkSize = 1000000ULL);
+
+		void handleCommandDownload(util::Args args);
+
+		void handleCommandFiles(util::Args args);
+
 		void handleCommandSetStream(util::Args args);
 
 		void handleCommandInlineMessage(std::string message);
@@ -89,7 +124,7 @@ namespace net
 
 		void handle_read(const boost::system::error_code& error, std::size_t n);
 
-		void dumpMessage(nlohmann::json j);
+		void dumpJson(nlohmann::json j);
 
 		void processWelcome(std::string data);
 
@@ -105,17 +140,23 @@ namespace net
 
 		void handle_write(const boost::system::error_code& error);
 
+		void lockDump();
+
+		void unlockDump();
+
+		bool canDump();
+
 		void dumpConsoleStream();
 	private:
 		bool stopped_ = false;
 		tcp::resolver::results_type endpoints_;
 		tcp::socket socket_;
 
-		const size_t max_length = 4096;
-		char data_[4096];
+		const size_t max_length = 2000000;
+		char data_[2000000];
 
-		const size_t packet_body_length = 4096;
-		char packet_body[4096];
+		const size_t packet_body_length = 2000000;
+		char packet_body[2000000];
 
 		uint32_t expectedLength = 4;
 		uint32_t messageCounter = 0;
@@ -136,8 +177,12 @@ namespace net
 		std::stringstream& info();
 		std::stringstream& in();
 		std::stringstream& dump();
+		std::stringstream& time();
 
+		bool dumpLocked = false;
 
+		std::map<std::string, File> availableFiles;
+		File currentFile;
 
 	};
 

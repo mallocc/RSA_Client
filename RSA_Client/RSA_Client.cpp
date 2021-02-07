@@ -17,7 +17,6 @@
 
 #include <conio.h>
 
-
 using net::client;
 using net::Keyring;
 
@@ -51,12 +50,14 @@ int main(int argc, char* argv[])
 		 
 		util::Utilities::genRSAKeyPair(2048);
 		c.setKeys(Keyring("keys/private-key.der", "keys/public-key.der"));
-		//81.147.31.211
+		//"81.147.31.211"
+		//"192.168.1.226"
 		std::string ip = util::Utilities::getInput("What IP?", "192.168.1.226");
 		std::string port = util::Utilities::getInput("What port?", "32500");
 		c.setUsername(util::Utilities::getInput("Username?", "mallocc"));
 
 		std::thread clientThread;
+
 
 		clientThread = std::thread([&]() {
 			if (c.start(r.resolve(ip, port)))
@@ -68,23 +69,31 @@ int main(int argc, char* argv[])
 		clientThread.detach();
 
 		int count = 0;
+		std::string lastInput;
 		while (true)
 		{
-			//c.dumpConsoleStream();
+			c.dumpConsoleStream();
 			// will process input if in stream, otherwise input is triggered from ESC
 			// using side effects
-			if (c.isStreaming() || _getch() == 0x1b)
+
+			char ch = _getch();
+			if (ch == 27 || ch == '\r')
 			{
-				std::string input = util::Utilities::getInput("");
+				c.lockDump();
+				std::string input = util::Utilities::getInput("","",true);
 				if (!input.empty())
 				{
 					if (input[0] == '!')
 					{
 						input.erase(0, 1);
+						if (input[0] == '!')
+							input = lastInput;
+					
 						std::stringstream ss(input);
 						std::istream_iterator<std::string> begin(ss);
 						std::istream_iterator<std::string> end;
 						util::Args args(begin, end);
+						args = util::Utilities::extractLiteralArgs(args);
 
 						if (!args.empty())
 						{
@@ -122,11 +131,11 @@ int main(int argc, char* argv[])
 							{
 								c.handleCommandRooms(args);
 							}
-							else if (command == "subscribe" || command == "join")
+							else if (command == "subscribe" || command == "join" || command == "sub")
 							{
 								c.handleCommandSubscribe(args);
 							}
-							else if (command == "unsubscribe" || command == "leave")
+							else if (command == "unsubscribe" || command == "leave" || command == "unsub")
 							{
 								c.handleCommandUnsubscribe(args);
 							}
@@ -142,6 +151,14 @@ int main(int argc, char* argv[])
 							{
 								c.handleCommandSetStream(args);
 							}
+							else if (command == "files")
+							{
+								c.handleCommandFiles(args);
+							}
+							else if (command == "download" || command == "get")
+							{
+								c.handleCommandDownload(args);
+							}
 							else if (command == "forget-server")
 							{
 								std::string ip = args[1];
@@ -155,11 +172,17 @@ int main(int argc, char* argv[])
 							}							
 						}
 					}
-					else
+					else if (c.isStreaming())
 					{
 						c.handleCommandInlineMessage(input);
 					}
+					else
+					{
+						util::lerr << "'" << input << "' is not a valid command." << std::endl;
+					}
+					lastInput = input;
 				}
+				c.unlockDump();
 			}
 
 			using namespace std::chrono_literals;

@@ -42,6 +42,8 @@ namespace util
 
         static bool yesNo(std::string question, bool defaultYes = true);
         static std::string getInput(std::string question, std::string defaultString = "", bool noDefault = false);
+
+        static Args extractLiteralArgs(Args args);
     };
 
 

@@ -19,6 +19,9 @@
 #include "Base64.h"
 
 
+#include <conio.h>
+
+
 std::string util::Utilities::slurp(std::ifstream& in)
 {
 	std::ostringstream sstr;
@@ -159,14 +162,110 @@ std::string util::Utilities::getInput(std::string question, std::string defaultS
 		ss << "(" << defaultString << ")";
 
 	bool proceed = false;
+	std::string saved;
 	while (!proceed)
 	{
 		std::cout << ANSI_YELLOW//<< IN_MSG 
 			<< (question.empty() ? "" : question + " ")
 			<< (ss.str().empty() ? "" : ss.str() + " ")
-			<< ANSI_RESET << "> ";
+			<< ANSI_RESET << "> " << saved;
 		std::string inString;
 		std::getline(std::cin, inString);
+
+#ifdef custom
+#define KEY_UP    72
+#define KEY_LEFT  75
+#define KEY_RIGHT 77
+#define KEY_DOWN  80
+		bool rewriteInput = false;
+		char ch = 0;
+		size_t cp = saved.size();
+		while (true) {
+			ch = _getch();
+			if (ch == -32)
+			{
+				ch = _getch();
+				if (ch == KEY_LEFT) // LEFT
+				{
+					if (cp > 0)
+					{
+						std::cout << "\033[0D";
+						cp--;
+					}
+					continue;
+				}
+				else if (ch == KEY_RIGHT) // RIGHT
+				{
+					if (cp < saved.size())
+					{
+						std::cout << "\033[0C";
+						cp++;
+					}
+					continue;
+				}
+			}
+			else 
+			{
+				if (ch == 0x1b) // ESC
+				{
+					rewriteInput = true;
+					std::cout << std::endl;
+					break;
+				}
+				else if (ch == '\b') // BACKSPACE
+				{
+					if (cp > 0)
+					{					
+						saved.erase(cp);
+						cp--; 
+						
+						// clear line
+						std::string leftover = saved.substr(cp);
+						std::cout << "\033[0D\033[0K" << leftover << "\033[" << (leftover.size()+1) << "D";
+					}
+					else
+					{
+						saved.clear();
+						// clear line
+						std::cout << "\033[0K";
+					}
+					continue;
+				}
+				else if (ch == '\r') // ENTER
+				{
+					std::cout << std::endl;
+					break;
+				}
+				else
+				{
+					saved.insert(saved.begin() + cp, ch);
+					cp++;
+					if (cp < saved.size())
+					{
+						// clear line
+						std::string leftover = saved.substr(cp-1);
+						std::cout << leftover << "\033[" << (leftover.size()-1) << "D";
+					}
+					else
+					{
+						std::cout << ch;
+					}
+
+					
+				}
+			}			
+		}
+
+		if (rewriteInput)
+		{
+			continue;
+		}
+
+		inString = saved;
+		saved.clear();
+
+#endif
+
 		if (inString != "")
 		{
 			ret = inString;
@@ -183,6 +282,42 @@ std::string util::Utilities::getInput(std::string question, std::string defaultS
 	}
 
 	return ret;
+}
+
+util::Args util::Utilities::extractLiteralArgs(Args args)
+{
+	Args newArgs;
+	std::string tempArg;
+	bool midArg = false;
+	for (auto arg : args)
+	{		
+		if (!midArg && !arg.empty() && (arg[0] == '"'))
+		{
+			tempArg.clear();
+			arg.erase(0, 1);
+			tempArg += arg + " ";
+			if (arg[arg.size() - 1] != '"')
+				midArg = true;
+		}
+		else if (midArg && !arg.empty()
+			&& (arg[arg.size() - 1] == '"'))
+		{
+			arg.erase(arg.size() - 1, 1);
+			tempArg += arg;
+			midArg = false;
+			newArgs.push_back(tempArg);
+		}
+		else if (midArg)
+		{
+			tempArg += arg + " ";
+		}
+		else
+		{
+			newArgs.push_back(arg);
+		}
+	}
+
+	return newArgs;
 }
 
 void util::Utilities::AESEcryptJson(nlohmann::json j, std::vector<CryptoPP::byte> key, std::vector<CryptoPP::byte> iv, std::string& output)

@@ -6,7 +6,7 @@
 #include "modes.h"
 #include <boost/filesystem.hpp>
 #include <conio.h>
-
+#include <ctime>
 
 using util::ANSI_BLUE;
 using util::ANSI_YELLOW;
@@ -52,6 +52,9 @@ bool net::client::start(tcp::resolver::results_type endpoints)
 
 	if (clientKeys.valid)
 	{
+
+		//socket_.set_option(tcp::no_delay(true));
+
 		// Start the connect actor.
 		endpoints_ = endpoints;
 
@@ -121,15 +124,60 @@ bool net::client::isStreaming()
 	return !stream.empty();
 }
 
-void net::client::handleCommandSetStream(util::Args args)
+void net::client::getChunk(std::string uid, size_t start, size_t chunkSize)
 {
-	if (args.size() == 1)
+	std::map<std::string, File>::iterator itor = availableFiles.find(uid);
+	if (itor != availableFiles.end())
 	{
-		stream = util::Utilities::getInput("Stream", "", false);
+		File& file = itor->second;
+
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "get_chunk";
+		crypt["uid"] = uid;
+		crypt["start"] = start;
+		crypt["end"] = start + chunkSize;
+
+		sendJson(crypt);
+	}
+}
+
+void net::client::handleCommandDownload(util::Args args)
+{
+	if (args.size() == 2)
+	{
+		getChunk(args[1]);
 	}
 	else
 	{
-		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+		util::lerr << "usage: download <uid>" << std::endl;
+	}
+}
+
+void net::client::handleCommandFiles(util::Args args)
+{
+	if (args.size() == 2)
+	{
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "files";
+		crypt["data"] = macaron::Base64::Encode(args[1]);
+
+		sendJson(crypt);
+	}
+	else
+	{
+		util::lerr << "usage: files <room>" << std::endl;
+	}
+}
+
+void net::client::handleCommandSetStream(util::Args args)
+{
+	if (args.size() == 2)
+	{
+		stream = args[1];
+	}
+	else
+	{
+		util::lerr << "usage: stream <room>" << std::endl;
 	}
 }
 
@@ -148,65 +196,63 @@ void net::client::handleCommandInlineMessage(std::string message)
 
 void net::client::handleCommandCreate(util::Args args)
 {
-	if (args.size() == 1)
+	if (args.size() == 3)
 	{
 		nlohmann::json crypt;
 		crypt[SCHEMA_TYPE] = "create";
-		crypt["create"] = macaron::Base64::Encode(util::Utilities::getInput("Type", "", false));
-		crypt["name"] = macaron::Base64::Encode(util::Utilities::getInput("Name", "", false));
+		crypt["create"] = macaron::Base64::Encode(args[1]);
+		crypt["name"] = macaron::Base64::Encode(args[2]);
 
 		sendJson(crypt);
 	}
 	else
 	{
-		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+		util::lerr << "usage: create [room|user] <name>" << std::endl;
 	}
 }
 
 void net::client::handleCommandRemove(util::Args args)
 {
-	if (args.size() == 1)
+	if (args.size() == 3)
 	{
 		nlohmann::json crypt;
 		crypt[SCHEMA_TYPE] = "remove";
-		crypt["remove"] = macaron::Base64::Encode(util::Utilities::getInput("Type", "", false));
-		crypt["name"] = macaron::Base64::Encode(util::Utilities::getInput("Name", "", false));
+		crypt["remove"] = macaron::Base64::Encode(args[1]);
+		crypt["name"] = macaron::Base64::Encode(args[2]);
 
 		sendJson(crypt);
 	}
 	else
 	{
-		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+		util::lerr << "usage: remove [room|user] <name>" << std::endl;
 	}
 }
 
 void net::client::handleCommandSubscribe(util::Args args)
 {
-	if (args.size() == 1)
+	if (args.size() == 2)
 	{
 		nlohmann::json crypt;
 		crypt[SCHEMA_TYPE] = "subscribe";
-
-		std::string roomName = util::Utilities::getInput("Room name", "", false);
-		crypt["data"] = macaron::Base64::Encode(roomName);
+		crypt["data"] = macaron::Base64::Encode(args[1]);
 
 		sendJson(crypt);
 
-		stream = roomName;
+		stream = args[1];
 	}
 	else
 	{
-		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+		util::lerr << "usage: subscribe <room|user>" << std::endl;
 	}
 }
 
 void net::client::handleCommandUnsubscribe(util::Args args)
 {
-	if (args.size() == 1)
+	if (args.size() == 2)
 	{
 		nlohmann::json crypt;
 		crypt[SCHEMA_TYPE] = "unsubscribe";
-		crypt["data"] = macaron::Base64::Encode(util::Utilities::getInput("Room name", "", false));
+		crypt["data"] = macaron::Base64::Encode(args[1]);
 
 		sendJson(crypt);
 
@@ -214,24 +260,24 @@ void net::client::handleCommandUnsubscribe(util::Args args)
 	}
 	else
 	{
-		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+		util::lerr << "usage: unsubscribe <room|user>" << std::endl;
 	}
 }
 
 void net::client::handleCommandTo(util::Args args)
 {
-	if (args.size() == 2)
+	if (args.size() == 3)
 	{
 		nlohmann::json crypt;
 		crypt[SCHEMA_TYPE] = "message";
 		crypt["to"] = macaron::Base64::Encode(args[1]);
-		crypt["data"] = macaron::Base64::Encode(util::Utilities::getInput("Message", "", false));
+		crypt["data"] = macaron::Base64::Encode(args[2]);
 
 		sendJson(crypt);
 	}
 	else
 	{
-		util::lerr << "Incorrect argument count. Should be 2." << std::endl;
+		util::lerr << "usage: to <room|user> <message>" << std::endl;
 	}
 }
 
@@ -246,7 +292,7 @@ void net::client::handleCommandOnline(util::Args args)
 	}
 	else
 	{
-		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+		util::lerr << "usage: online" << std::endl;
 	}
 }
 
@@ -261,7 +307,7 @@ void net::client::handleCommandRooms(util::Args args)
 	}
 	else
 	{
-		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+		util::lerr << "usage: rooms" << std::endl;
 	}
 }
 
@@ -286,7 +332,7 @@ void net::client::handleCommandPing(util::Args args)
 	}
 	else
 	{
-		util::lerr << "Incorrect argument count. Should be 1." << std::endl;
+		util::lerr << "usage: ping" << std::endl;
 	}
 }
 
@@ -358,20 +404,22 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 
 		processMessage(message);
 
+		dumpConsoleStream();
+
 		start_read();
 	}
 	else
 	{
-		util::lerr << "Error on receive: " << error.message() << util::lend;
+		err() << "Error on receive: " << error.message() << std::endl;
 
 		stop();
 	}
 
 }
 
-void net::client::dumpMessage(nlohmann::json j)
+void net::client::dumpJson(nlohmann::json j)
 {
-	util::ldump << j.dump(2) << std::endl;
+	dump() << j.dump(2) << std::endl;
 }
 
 void net::client::processWelcome(std::string data)
@@ -384,7 +432,7 @@ void net::client::processWelcome(std::string data)
 
 	// store service finger print for checking later
 	serverFingerPrint = util::Utilities::sha256(decoded);
-	util::linfo << "Server fingerprint <" << ANSI_CYAN_BG << serverFingerPrint << ANSI_RESET << ">" << util::lend;
+	info() << "Server fingerprint <" << ANSI_CYAN_BG << serverFingerPrint << ANSI_RESET << ">" << std::endl;
 
 	// retrieve the public key data from the message
 	CryptoPP::StringSource ss((const CryptoPP::byte*) decoded.c_str(), decoded.size(), true);
@@ -414,7 +462,7 @@ void net::client::processWelcome(std::string data)
 		std::string serverFingerPrintFromFile = util::Utilities::sha256(fileb);
 		if (serverFingerPrint != serverFingerPrintFromFile)
 		{
-			util::lerr << "Server fingerprint does not match keyring! Use command 'forget-server <ip>' to accept new fingerprint." << util::lend;
+			err() << "Server fingerprint does not match keyring! Use command 'forget-server <ip>' to accept new fingerprint." << std::endl;
 
 			//// let the user decide if they want to update the public key
 			//if (util::Utilities::yesNo("Are you sure you want to connect?", false))
@@ -514,7 +562,7 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 		{
 			macaron::Base64::Decode(j["room"], room);
 
-			std::cout << room << ": ";
+			out << room << ": ";
 		}
 
 		std::string from;
@@ -523,41 +571,76 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 		{
 			macaron::Base64::Decode(j["from"], from);
 
-			std::cout << from << ": " << message << std::endl;
+			time() << from << ": " << message << std::endl;
+		}
+	}
+	else if (type == "files")
+	{
+		if (j.contains("files"))
+		{
+			availableFiles.clear();
+
+			out << "Files available: " << std::endl;
+
+			nlohmann::json files = j["files"];
+			// range-based for
+			for (auto& element : files)
+			{
+				out << '\t';
+				if (element.contains("filename"))
+				{
+					if (element.contains("uid"))
+					{
+						availableFiles[element["uid"]] = File(element);
+						out << element["uid"] << " - ";
+					}
+
+					out << element["filename"] << " - ";
+					if (element.contains("size"))
+					{
+						out << element["size"] << "B";
+					}
+				}
+				out << std::endl;
+			}
+
+			out << std::endl;
 		}
 	}
 	else if (type == "online")
 	{
 		if (j.contains("users"))
 		{
-			std::cout << "Users online: " << std::endl;
+			out << "Users online: " << std::endl;
 
 			nlohmann::json users = j["users"];
 			// range-based for
-			for (auto& element : users) {
+			for (auto& element : users)
+			{
 				std::string user;
 				macaron::Base64::Decode(element, user);
-				std::cout << '\t' << user << std::endl;
+				out << '\t' << user << std::endl;
 			}
 
-			std::cout << std::endl;
+			out << std::endl;
 		}
 	}
 	else if (type == "rooms")
 	{
 		if (j.contains("rooms"))
 		{
-			std::cout << "Rooms: " << std::endl;
+			out << "Rooms: " << std::endl;
 
 			nlohmann::json rooms = j["rooms"];
 			// range-based for
-			for (auto& element : rooms) {
+			for (auto& element : rooms)
+			{
 				std::string room;
 				macaron::Base64::Decode(element, room);
-				std::cout << '\t' << room << std::endl;
+				out << '\t' << room << std::endl;
 			}
 
-			std::cout << std::endl;
+			out << std::endl;
 		}
 	}
 	else if (type == "notice")
@@ -569,9 +652,68 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 			macaron::Base64::Decode(j["data"], data);
 		}
 
-		std::cout << data << std::endl;
+		out << data << std::endl;
 	}
+	else if (type == "get_chunk")
+	{
+		std::string data;
 
+		if (j.contains("data"))
+		{
+			macaron::Base64::Decode(j["data"], data);
+
+			std::string uid = j["uid"];
+			size_t start = j["start"];
+			size_t end = j["end"];
+			size_t size = j["size"];
+			size_t totalSize = j["totalSize"];		
+
+			std::map<std::string, File>::iterator itor = availableFiles.find(uid);
+			if (itor != availableFiles.end())
+			{
+				File& file = itor->second;
+
+				boost::filesystem::create_directory("files");
+				std::string filename = "files/" + file.filename;
+				if (!boost::filesystem::exists(filename) || start > 0)
+				{
+					std::ofstream fout(filename, std::ios::binary | std::ios::out | std::ios::app);
+					if (fout)
+					{
+						fout.write(data.c_str(), size);
+						fout.close();
+					}
+					else
+					{
+						err() << "File failed to open. Aborting download." << std::endl;
+						return;
+					}
+
+					info() << "Downloaded chunk: " << uid << " " << start << ", " << end << ", " << size << ", " << totalSize << std::endl;
+				}				
+				else 
+				{
+					err() << "File already exists. Aborting download." << std::endl;
+					return;
+				}
+				//file.data.resize(file.data.size() + size);
+				//memcpy(file.data.data() + start, data.c_str(), size);
+			}
+			else
+			{
+				err() << "Could not find file." << std::endl;
+			}
+
+			if (end < totalSize)
+			{
+				getChunk(uid, end);
+			}
+			else
+			{
+				info() << "Finished downloading file." << std::endl;
+			}
+		}
+	}
 	else if (type == "announce_response")
 	{
 		std::string data;
@@ -583,12 +725,12 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 
 		if (data != "OK")
 		{
-			util::lerr << "Server refused login. Reason: " << data << std::endl;
+			err() << "Server refused login. Reason: " << data << std::endl;
 		}
 	}
 	else
 	{
-		dumpMessage(j);
+		dumpJson(j);
 	}
 }
 
@@ -623,7 +765,7 @@ void net::client::processMessage(std::string messageData)
 			}
 			else
 			{
-				dumpMessage(j);
+				dumpJson(j);
 			}
 		}
 
@@ -641,14 +783,14 @@ void net::client::processMessage(std::string messageData)
 					).count();
 				std::stringstream ss;
 				ss << (ms - ts_) / 2 << "ms";
-				util::linfo << "Ping returned in " << ss.str() << std::endl;
+				info() << "Ping returned in " << ss.str() << std::endl;
 			}
 		}
 
 	}
 	catch (nlohmann::json::exception& e)
 	{
-		std::cout << e.what() << std::endl;
+		err() << e.what() << std::endl;
 	}
 }
 
@@ -705,6 +847,21 @@ void net::client::handle_write(const boost::system::error_code& error)
 	}
 }
 
+void net::client::lockDump()
+{
+	dumpLocked = true;
+}
+
+void net::client::unlockDump()
+{
+	dumpLocked = false;
+}
+
+bool net::client::canDump()
+{
+	return !dumpLocked;
+}
+
 std::stringstream& net::client::err()
 {
 	out << util::ERROR_MSG;
@@ -729,10 +886,21 @@ std::stringstream& net::client::dump()
 	return out;
 }
 
+std::stringstream& net::client::time()
+{
+	//std::time_t t = std::time(0);   // get time now
+	//std::tm* now = std::localtime(&t);
+	//out << '[' << now->tm_hour << ':' << now->tm_min << ":" << now->tm_sec << "] ";
+	return out;
+}
+
 void net::client::dumpConsoleStream()
 {
-	std::cout << out.str();
-	out.str("");
+	if (canDump())
+	{
+		std::cout << out.str();
+		out.str("");
+	}
 }
 
 void net::client::setUsername(std::string username)

@@ -77,8 +77,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\Program Files %28x86%29\boost\boost_1_75_0;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Program Files %28x86%29\boost\boost_1_75_0\stage\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Program Files %28x86%29\boost\boost_1_75_0;C:\Program Files %28x86%29\cryptopp-master;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Program Files %28x86%29\boost\boost_1_75_0\stage\lib;C:\Program Files %28x86%29\cryptopp-master\x64\Output\Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -87,8 +87,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>C:\Program Files %28x86%29\boost\boost_1_75_0;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Program Files %28x86%29\boost\boost_1_75_0\stage\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Program Files %28x86%29\boost\boost_1_75_0;C:\Program Files %28x86%29\cryptopp-master;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Program Files %28x86%29\boost\boost_1_75_0\stage\lib;C:\Program Files %28x86%29\cryptopp-master\x64\Output\Release;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -117,6 +117,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>cryptlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -154,6 +155,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>cryptlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
