@@ -343,3 +343,5 @@ healthchecksdb
 *.der
 *.der
 *.der
+*.exe
+*.zip
