@@ -15,18 +15,30 @@ namespace util
 {
     const std::string ANSI_RESET = "\033[0m";
     const std::string ANSI_RED = "\033[01;31m";
-    const std::string ANSI_GREEN = "\033[01;32m";
+    const std::string ANSI_RED_BG = "\033[01;41m";
+    const std::string ANSI_GREEN = "\033[05;32m";
+    const std::string ANSI_GREEN_BG = "\033[01;42m";
     const std::string ANSI_YELLOW = "\033[01;33m";
+    const std::string ANSI_YELLOW_BG = "\033[01;43m";
     const std::string ANSI_BLUE = "\033[01;34m";
     const std::string ANSI_MAGENTA = "\033[01;35m";
+    const std::string ANSI_MAGENTA_BG = "\033[01;45m";
     const std::string ANSI_CYAN = "\033[01;36m";
     const std::string ANSI_CYAN_BG = "\033[01;46m";
     const std::string ANSI_WHITE = "\033[01;37m";
+    const std::string ANSI_WHITE_BG = "\033[01;47m";
+    const std::string ANSI_CLEAR_LINE_RIGHT = "\033[0K";
+    const std::string ANSI_CLEAR_LINE_LEFT = "\033[1K";
+    const std::string ANSI_CLEAR_LINE = "\033[2K";
+    const std::string ANSI_UP = "\033[A";
+    const std::string ANSI_DOWN = "\033[B";
+    const std::string ANSI_RIGHT = "\033[C";
+    const std::string ANSI_LEFT = "\033[D";
 
-    const std::string ERROR_MSG = "[" + ANSI_RED + "ERROR" + ANSI_RESET + "]: ";
-    const std::string INFO_MSG = "[" + ANSI_GREEN + "INFO" + ANSI_RESET + "]: ";
-    const std::string IN_MSG = "[" + ANSI_YELLOW + "INPUT" + ANSI_RESET + "]: ";
-    const std::string DUMP_MSG = "[" + ANSI_WHITE + "DUMP" + ANSI_RESET + "]: ";
+    const std::string ERROR_MSG = "<" + ANSI_RED + "ERROR" + ANSI_RESET + "> ";
+    const std::string INFO_MSG = "<" + ANSI_GREEN + "INFO" + ANSI_RESET + "> ";
+    const std::string IN_MSG = "<" + ANSI_YELLOW + "INPUT" + ANSI_RESET + "> ";
+    const std::string DUMP_MSG = "<" + ANSI_WHITE + "DUMP" + ANSI_RESET + "> ";
 
     typedef std::vector<std::string> Args;
 
@@ -63,6 +75,9 @@ namespace util
         std::string note();
 
         std::string end();
+
+        std::string time();
+
         
 
         static Console& getInstance()
@@ -88,6 +103,7 @@ namespace util
 #define linfo Console::getInstance().info()
 #define lerr Console::getInstance().error()
 #define lnote Console::getInstance().note()
+#define ltime Console::getInstance().time()
 #define lend Console::getInstance().end()
 #define lsetnote(x) Console::getInstance().setNote(x)
 

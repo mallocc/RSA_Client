@@ -7,18 +7,24 @@
 #include <boost/filesystem.hpp>
 #include <conio.h>
 #include <ctime>
+#include <iostream>
+#include <iomanip>
+#include <chrono>
 
 using util::ANSI_BLUE;
 using util::ANSI_YELLOW;
 using util::ANSI_RED;
 using util::ANSI_GREEN;
 using util::ANSI_MAGENTA;
+using util::ANSI_MAGENTA_BG;
 using util::ANSI_RESET;
 using util::ANSI_CYAN;
 using util::ANSI_CYAN_BG;
 using util::ANSI_WHITE;
 using util::ERROR_MSG;
 using util::INFO_MSG;
+using util::ANSI_CLEAR_LINE;
+
 
 namespace
 {
@@ -110,7 +116,7 @@ void net::client::start_connect(tcp::resolver::results_type::iterator endpoint_i
 {
 	if (endpoint_iter != endpoints_.end())
 	{
-		util::linfo << "Reestablishing connection on " << endpoint_iter->endpoint() << "..." << util::lend;
+		util::linfo << "Connecting on " << endpoint_iter->endpoint() << "..." << util::lend;
 
 		// Start the asynchronous connect operation.
 		socket_.async_connect(endpoint_iter->endpoint(),
@@ -145,7 +151,33 @@ void net::client::handleCommandDownload(util::Args args)
 {
 	if (args.size() == 2)
 	{
-		getChunk(args[1]);
+		bool get = true;
+
+		std::string uid = args[1];
+		std::map<std::string, File>::iterator itor = availableFiles.find(uid);
+		if (itor != availableFiles.end())
+		{
+			File& file = itor->second;
+			std::string filename = "files/" + file.filename;
+			if (boost::filesystem::exists(filename))
+			{
+				if (util::Utilities::yesNo(file.filename + " already exist. Would you like to overwrite the file?", false))
+				{
+					boost::filesystem::remove(filename);
+				}
+				else
+				{
+					get = false;
+					util::linfo << "Aborted download." << std::endl;
+				}
+			}
+		}
+
+		if (get)
+		{
+			util::linfo << "Commencing download..." << std::endl;
+			getChunk(args[1]);
+		}
 	}
 	else
 	{
@@ -155,7 +187,15 @@ void net::client::handleCommandDownload(util::Args args)
 
 void net::client::handleCommandFiles(util::Args args)
 {
-	if (args.size() == 2)
+	if (args.size() == 1)
+	{
+		nlohmann::json crypt;
+		crypt[SCHEMA_TYPE] = "files";
+		crypt["data"] = macaron::Base64::Encode(stream);
+
+		sendJson(crypt);
+	}
+	else if (args.size() == 2)
 	{
 		nlohmann::json crypt;
 		crypt[SCHEMA_TYPE] = "files";
@@ -372,7 +412,7 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 	// Otherwise we have successfully established a connection.
 	else
 	{
-		util::linfo << "Connected to " << endpoint_iter->endpoint() << util::lend;
+		util::linfo << "Connected as " << ANSI_MAGENTA_BG << username << ANSI_RESET << " on " << endpoint_iter->endpoint() << util::lend;
 
 		// Start the input actor.
 		start_read();
@@ -381,12 +421,15 @@ void net::client::handle_connect(const boost::system::error_code& error, tcp::re
 
 void net::client::start_read()
 {
+	const std::lock_guard<std::mutex> lock(receiveMutex);
+	util::linfo << "start_read enter" << std::endl;
 	//read start of packet
 	boost::asio::async_read(socket_, boost::asio::buffer(data_, 4), std::bind(&client::handle_read, this, _1, _2));
 }
 
 void net::client::handle_read(const boost::system::error_code& error, std::size_t n)
 {
+	util::linfo << "handle_read enter" << std::endl;
 	if (!error)
 	{
 		uint32_t dataSize = 0;
@@ -396,6 +439,7 @@ void net::client::handle_read(const boost::system::error_code& error, std::size_
 
 		if (dataSize > packet_body_length) {
 			//big problem, packet too big
+			err() << "big problem, packet too big - size was: " << dataSize << " max size: " << packet_body_length << std::endl;
 		}
 
 		boost::asio::read(socket_, boost::asio::buffer(packet_body, dataSize));
@@ -537,6 +581,8 @@ void net::client::processWelcome(std::string data)
 
 	// send it
 	writePacket(j.dump());
+
+	handleCommandSetStream({ "stream", "General" });
 }
 
 void net::client::processEncryptedMessage(nlohmann::json j)
@@ -549,6 +595,8 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 
 	if (type == "message")
 	{
+		std::stringstream ss;
+
 		std::string message;
 
 		if (j.contains("data"))
@@ -561,8 +609,7 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 		if (j.contains("room"))
 		{
 			macaron::Base64::Decode(j["room"], room);
-
-			out << room << ": ";
+			ss << ANSI_MAGENTA << room << ANSI_RESET << ": ";
 		}
 
 		std::string from;
@@ -570,9 +617,11 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 		if (j.contains("from"))
 		{
 			macaron::Base64::Decode(j["from"], from);
-
-			time() << from << ": " << message << std::endl;
 		}
+
+		ss << (room.empty() ? ANSI_CYAN_BG : ANSI_CYAN) << from << ANSI_RESET << ": " << message << std::endl;
+
+		time() << ss.str();
 	}
 	else if (type == "files")
 	{
@@ -603,8 +652,6 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 				}
 				out << std::endl;
 			}
-
-			out << std::endl;
 		}
 	}
 	else if (type == "online")
@@ -621,8 +668,6 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 				macaron::Base64::Decode(element, user);
 				out << '\t' << user << std::endl;
 			}
-
-			out << std::endl;
 		}
 	}
 	else if (type == "rooms")
@@ -639,8 +684,6 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 				macaron::Base64::Decode(element, room);
 				out << '\t' << room << std::endl;
 			}
-
-			out << std::endl;
 		}
 	}
 	else if (type == "notice")
@@ -652,7 +695,7 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 			macaron::Base64::Decode(j["data"], data);
 		}
 
-		out << data << std::endl;
+		info() << data << std::endl;
 	}
 	else if (type == "get_chunk")
 	{
@@ -660,13 +703,15 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 
 		if (j.contains("data"))
 		{
+			util::linfo << "processMessage enter" << std::endl;
+
 			macaron::Base64::Decode(j["data"], data);
 
 			std::string uid = j["uid"];
 			size_t start = j["start"];
 			size_t end = j["end"];
 			size_t size = j["size"];
-			size_t totalSize = j["totalSize"];		
+			size_t totalSize = j["totalSize"];
 
 			std::map<std::string, File>::iterator itor = availableFiles.find(uid);
 			if (itor != availableFiles.end())
@@ -677,11 +722,10 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 				std::string filename = "files/" + file.filename;
 				if (!boost::filesystem::exists(filename) || start > 0)
 				{
-					std::ofstream fout(filename, std::ios::binary | std::ios::out | std::ios::app);
-					if (fout)
+					file.fout = std::ofstream(filename, std::ios::binary | std::ios::out | std::ios::app);
+					if (file.fout)
 					{
-						fout.write(data.c_str(), size);
-						fout.close();
+						file.fout.write(data.c_str(), size);
 					}
 					else
 					{
@@ -689,28 +733,37 @@ void net::client::processEncryptedMessage(nlohmann::json j)
 						return;
 					}
 
-					info() << "Downloaded chunk: " << uid << " " << start << ", " << end << ", " << size << ", " << totalSize << std::endl;
-				}				
-				else 
+					float msSince = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - lastBytesSentTS).count();
+					lastBytesSentTS = std::chrono::high_resolution_clock::now();
+					lastBytesSent = size;
+					//std::cout << std::setprecision(4) << end / 1024 << " KB in " << msSince << " ms. " <<
+					//	((size / 1024.f / 1024.f) / (msSince / 1000.f)) << " MBps              \r";
+					if (start == 0)
+						info() << "Downloading " << file.filename << " " << (int)((float)end / (float)totalSize * 100) << "%...       \n";
+					else
+						info() << "Downloading " << file.filename << " [" << std::setprecision(4) << ((size / 1024.f / 1024.f) / (msSince / 1000.f)) << "Mbps] " << (int)((float)end / (float)totalSize * 100) << "%...       \n";
+				}
+				else
 				{
 					err() << "File already exists. Aborting download." << std::endl;
 					return;
 				}
 				//file.data.resize(file.data.size() + size);
 				//memcpy(file.data.data() + start, data.c_str(), size);
+
+				if (end < totalSize)
+				{
+					getChunk(uid, end);
+				}
+				else
+				{
+					file.fout.close();
+					info() << "Finished downloading " << file.filename << "." << std::endl;
+				}
 			}
 			else
 			{
 				err() << "Could not find file." << std::endl;
-			}
-
-			if (end < totalSize)
-			{
-				getChunk(uid, end);
-			}
-			else
-			{
-				info() << "Finished downloading file." << std::endl;
 			}
 		}
 	}
@@ -739,6 +792,7 @@ void net::client::processMessage(std::string messageData)
 	try
 	{
 		nlohmann::json j = nlohmann::json::parse(messageData);
+		util::linfo << "processMessage enter" << std::endl;
 
 		std::string type;
 		std::string data;
@@ -841,7 +895,7 @@ void net::client::handle_write(const boost::system::error_code& error)
 	}
 	else
 	{
-		util::lerr << "Error on writing: " << error.message() << "\n";
+		err() << "Error on writing: " << error.message() << "\n";
 
 		//stop();
 	}
@@ -864,33 +918,33 @@ bool net::client::canDump()
 
 std::stringstream& net::client::err()
 {
-	out << util::ERROR_MSG;
+	time() << util::ERROR_MSG;
 	return out;
 }
 
 std::stringstream& net::client::info()
 {
-	out << util::INFO_MSG;
+	time() << util::INFO_MSG;
 	return out;
 }
 
 std::stringstream& net::client::in()
 {
-	out << util::IN_MSG;
+	time() << util::IN_MSG;
 	return out;
 }
 
 std::stringstream& net::client::dump()
 {
-	out << util::DUMP_MSG;
+	time() << util::DUMP_MSG;
 	return out;
 }
 
 std::stringstream& net::client::time()
 {
-	//std::time_t t = std::time(0);   // get time now
-	//std::tm* now = std::localtime(&t);
-	//out << '[' << now->tm_hour << ':' << now->tm_min << ":" << now->tm_sec << "] ";
+#pragma warning(disable : 4996)
+	std::time_t const now_c = std::time(nullptr);
+	out << ANSI_CLEAR_LINE << '[' << std::put_time(std::localtime(&now_c), "%H:%M:%S") << "] ";
 	return out;
 }
 
@@ -900,6 +954,119 @@ void net::client::dumpConsoleStream()
 	{
 		std::cout << out.str();
 		out.str("");
+	}
+}
+
+void net::client::dumpConfig()
+{
+	std::ofstream file(configFilename, std::ios::out);
+	if (file)
+	{
+		nlohmann::json j;
+		j["last-server"] = lastServer;
+		j["port"] = port;
+		j["username"] = username;
+		j["autoconnect"] = autoconnect;
+
+		file << j.dump(2);
+		file.close();
+
+		util::linfo << "Saved config file." << std::endl;
+	}
+}
+
+void net::client::readConfig()
+{
+	if (!boost::filesystem::exists(configFilename))
+	{
+		util::linfo << "Config file not found. Creating new config file..." << std::endl;
+
+		std::ofstream file(configFilename, std::ios::out);
+		if (file)
+		{
+			nlohmann::json j;
+			j["last-server"] = "192.168.1.226";
+			j["port"] = "32500";
+			j["username"] = "mallocc";
+			j["autoconnect"] = true;
+
+			file << j.dump(2);
+			file.close();
+		}
+	}
+	else
+	{
+		std::ifstream file(configFilename);
+
+		if (file)
+		{
+			std::string str((std::istreambuf_iterator<char>(file)),
+				std::istreambuf_iterator<char>());
+			nlohmann::json j = nlohmann::json::parse(str);
+
+			if (j.contains("last-server"))
+				lastServer = j["last-server"];
+			if (j.contains("username"))
+				username = j["username"];
+			if (j.contains("autoconnect"))
+				autoconnect = j["autoconnect"];
+			if (j.contains("port"))
+				port = j["port"];
+
+			util::linfo << "Loaded config file." << std::endl;
+		}
+	}
+}
+
+void net::client::handleCommandSetLastServer(util::Args args)
+{
+	if (args.size() == 2)
+	{
+		lastServer = args[1];
+		dumpConfig();
+	}
+	else
+	{
+		util::lerr << "usage: set-ip <ip>" << std::endl;
+	}
+}
+
+void net::client::handleCommandSetAutoconnect(util::Args args)
+{
+	if (args.size() == 2)
+	{
+		autoconnect = args[1] == "true";
+		dumpConfig();
+	}
+	else
+	{
+		util::lerr << "usage: set-autoconnect [true|false]" << std::endl;
+	}
+}
+
+void net::client::handleCommandSetUsername(util::Args args)
+{
+	if (args.size() == 2)
+	{
+		username = args[1];
+		dumpConfig();
+	}
+	else
+	{
+		util::lerr << "usage: set-username <username>" << std::endl;
+	}
+}
+
+void net::client::handleCommandSetPort(util::Args args)
+{
+	if (args.size() == 2)
+	{
+		port = args[1];
+		dumpConfig();
+	}
+	else
+	{
+		util::lerr << "usage: set-port <port>" << std::endl;
 	}
 }
 

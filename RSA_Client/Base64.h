@@ -33,7 +33,7 @@ class Base64 {
  public:
 
   static std::string Encode(const std::string data) {
-      if (data.empty())
+      if (data.size() < 2)
           return "";
     static constexpr char sEncodingTable[] = {
       'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',

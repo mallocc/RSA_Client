@@ -12,6 +12,9 @@
 #include <base64.h>
 #include <files.h>
 
+#include <ctime>
+
+#include <iomanip>
 #include "modes.h"
 #include "aes.h"
 #include "filters.h"
@@ -353,27 +356,28 @@ void util::Utilities::AESEcryptJson(nlohmann::json j, std::vector<CryptoPP::byte
 std::ostream& util::Console::info()
 {
 	//printf("%c[2K", 27);
-	std::cout << INFO_MSG;
+	std::cout << time() << INFO_MSG;
 	return std::cout;
 }
 
 std::ostream& util::Console::error()
 {
 	//printf("%c[2K", 27);
-	std::cout << ERROR_MSG;
+	std::cout << time() << ERROR_MSG;
 	return std::cout;
 }
 
 std::ostream& util::Console::out()
 {
 	//printf("%c[2K", 27);
+	std::cout << time();
 	return std::cout;
 }
 
 std::ostream& util::Console::dump()
 {
 	//printf("%c[2K", 27);
-	std::cout << DUMP_MSG;
+	std::cout << time() << DUMP_MSG;
 	return std::cout;
 }
 
@@ -385,6 +389,15 @@ std::string util::Console::note()
 std::string util::Console::end()
 {
 	return "\n";// +m_note + "\r";
+}
+
+std::string util::Console::time()
+{
+#pragma warning(disable : 4996)
+	std::time_t const now_c = std::time(nullptr);
+	std::stringstream ss;
+	ss << ANSI_CLEAR_LINE << '[' << std::put_time(std::localtime(&now_c), "%H:%M:%S") << "] ";
+	return ss.str();
 }
 
 void util::Console::setNote(std::string note)

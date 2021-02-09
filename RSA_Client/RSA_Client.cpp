@@ -39,34 +39,26 @@ int main(int argc, char* argv[])
 		SetConsoleMode(hOut, dwMode);
 #endif
 
-		// get the saved server public key if it exists
-		std::string filename = "client.cfg";
-		if (!boost::filesystem::exists(filename))
-		{
-			//boost::b
-			
-		}
-
+		c.readConfig();
 		 
 		util::Utilities::genRSAKeyPair(2048);
 		c.setKeys(Keyring("keys/private-key.der", "keys/public-key.der"));
 		//"81.147.31.211"
 		//"192.168.1.226"
-		std::string ip = util::Utilities::getInput("What IP?", "192.168.1.226");
-		std::string port = util::Utilities::getInput("What port?", "32500");
-		c.setUsername(util::Utilities::getInput("Username?", "mallocc"));
 
 		std::thread clientThread;
 
-
-		clientThread = std::thread([&]() {
-			if (c.start(r.resolve(ip, port)))
-			{
-				io_context.restart();
-				io_context.run();
-			}
-			});
-		clientThread.detach();
+		if (c.autoconnect)
+		{
+			clientThread = std::thread([&]() {
+				if (c.start(r.resolve(c.lastServer, c.port)))
+				{
+					io_context.restart();
+					io_context.run();
+				}
+				});
+			clientThread.detach();
+		}
 
 		int count = 0;
 		std::string lastInput;
@@ -98,15 +90,38 @@ int main(int argc, char* argv[])
 						if (!args.empty())
 						{
 							std::string command = args[0];
-
-							if (command == "ping")
+							
+							if (command == "exit")
+							{
+								util::linfo << "Exiting app..." << std::endl;
+								c.stop();
+								io_context.stop();
+								exit(0);
+							}
+							else if (command == "ping")
 							{
 								c.handleCommandPing(args);
+							}
+							else if (command == "set-port")
+							{
+								c.handleCommandSetPort(args);
+							}
+							else if (command == "set-ip")
+							{
+								c.handleCommandSetLastServer(args);
+							}
+							else if (command == "set-username")
+							{
+								c.handleCommandSetUsername(args);
+							}
+							else if (command == "set-autoconnect")
+							{
+								c.handleCommandSetAutoconnect(args);
 							}
 							else if (command == "start")
 							{
 								clientThread = std::thread([&]() {
-									if (c.start(r.resolve(ip, port)))
+									if (c.start(r.resolve(c.lastServer, c.port)))
 									{
 										io_context.restart();
 										io_context.run();

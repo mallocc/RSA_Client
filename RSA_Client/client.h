@@ -24,6 +24,8 @@
 
 #include "Utilities.h"
 
+#include <mutex>
+
 using boost::asio::steady_timer;
 using boost::asio::ip::tcp;
 using std::placeholders::_1;
@@ -58,6 +60,7 @@ namespace net
 		size_t chunkSize = 0;
 		bool downloading = false;
 		std::vector<uint8_t> data;
+		std::ofstream fout;
 	};
 
 	class client
@@ -91,7 +94,7 @@ namespace net
 
 		bool isStreaming();
 
-		void getChunk(std::string uid, size_t start = 0, size_t chunkSize = 1000000ULL);
+		void getChunk(std::string uid, size_t start = 0, size_t chunkSize = 100000ULL);
 
 		void handleCommandDownload(util::Args args);
 
@@ -147,10 +150,27 @@ namespace net
 		bool canDump();
 
 		void dumpConsoleStream();
+
+		void dumpConfig();
+
+		void readConfig();
+
+		void handleCommandSetLastServer(util::Args args);
+		void handleCommandSetAutoconnect(util::Args args);
+		void handleCommandSetUsername(util::Args args);
+		void handleCommandSetPort(util::Args args);
+
+		std::string lastServer;
+		bool autoconnect = true;
+		std::string username;
+		std::string port = "32500";
+		std::string configFilename = "client.conf";
 	private:
 		bool stopped_ = false;
 		tcp::resolver::results_type endpoints_;
 		tcp::socket socket_;
+
+		std::mutex receiveMutex;
 
 		const size_t max_length = 2000000;
 		char data_[2000000];
@@ -165,7 +185,6 @@ namespace net
 
 		std::string serverFingerPrint;
 
-		std::string username;
 
 		std::thread interruptThread;
 
@@ -183,6 +202,10 @@ namespace net
 
 		std::map<std::string, File> availableFiles;
 		File currentFile;
+		std::chrono::high_resolution_clock::time_point lastBytesSentTS;
+		size_t lastBytesSent;
+
+
 
 	};
 
